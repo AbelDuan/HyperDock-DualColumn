@@ -13,9 +13,12 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Install Android SDK packages
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
         run: |
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager --sdk_root="$ANDROID_HOME" --install "platform-tools" "platforms;android-37" "build-tools;37.0.0"
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses >/dev/null 2>&1 || true
+          "$SDKM" --sdk_root="$ANDROID_HOME" --install "platform-tools" "platforms;android-37" "build-tools;37.0.0"
       - name: Build release APK
         run: |
           chmod +x gradlew

@@ -17,8 +17,9 @@ jobs:
           ANDROID_HOME: /usr/local/lib/android/sdk
         run: |
           SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          yes | "$SDKM" --licenses >/dev/null 2>&1 || true
-          "$SDKM" --sdk_root="$ANDROID_HOME" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          yes | "$SDKM" --channel=3 --licenses >/dev/null 2>&1 || true
+          "$SDKM" --sdk_root="$ANDROID_HOME" --channel=3 --install "platforms;android-37"
+          "$SDKM" --sdk_root="$ANDROID_HOME" --install "platform-tools" "build-tools;37.0.0"
       - name: Build release APK
         run: |
           chmod +x gradlew

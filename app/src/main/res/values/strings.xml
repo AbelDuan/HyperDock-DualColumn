@@ -64,6 +64,8 @@
     <string name="all_apps_custom_apps_summary">Select apps to show or hide; list membership is independent of the system-app switch</string>
     <string name="all_apps_show_system">Show system apps</string>
     <string name="all_apps_show_system_summary">Blacklist mode only: when off, the sidebar hides all system apps, then applies the blacklist</string>
+    <string name="all_apps_recent_title">Pinned recent apps</string>
+    <string name="all_apps_recent_summary">Check which sources to pin, then use the arrows to set their priority; pinned apps ignore black/whitelist rules</string>
     <string name="all_apps_sort_mode">App order</string>
     <string name="all_apps_sort_mode_summary">Recently opened / recent-task apps are pinned first and ignore black/whitelist rules</string>
     <string name="all_apps_sort_default">Default (system order)</string>

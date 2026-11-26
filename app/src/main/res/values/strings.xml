@@ -61,7 +61,9 @@
     <string name="all_apps_whitelist">Whitelist: show selected apps</string>
     <string name="all_apps_blacklist">Blacklist: hide selected apps</string>
     <string name="all_apps_custom_apps">Custom apps</string>
-    <string name="all_apps_custom_apps_summary">Select apps to show or hide</string>
+    <string name="all_apps_custom_apps_summary">Select apps to show or hide; the list follows the Show system apps filter</string>
+    <string name="all_apps_show_system">Show system apps</string>
+    <string name="all_apps_show_system_summary">When off, the all-apps list and black/whitelist only contain third-party apps</string>
     <string name="all_apps_no_apps">No launchable apps found</string>
     <string name="search_apps">Search apps</string>
 

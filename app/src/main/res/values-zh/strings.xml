@@ -62,6 +62,8 @@
     <string name="all_apps_custom_apps_summary">选择需要显示或隐藏的应用；名单内容与系统应用开关无关</string>
     <string name="all_apps_show_system">显示系统应用</string>
     <string name="all_apps_show_system_summary">仅黑名单模式生效：关闭后侧边栏隐藏全部系统应用，只保留第三方应用（再叠加黑名单）</string>
+    <string name="all_apps_recent_title">最近应用置顶</string>
+    <string name="all_apps_recent_summary">勾选要置顶的来源，用右侧箭头调整先后顺序；置顶应用不受黑白名单影响</string>
     <string name="all_apps_sort_mode">应用排序</string>
     <string name="all_apps_sort_mode_summary">最近打开/最近任务中的应用置顶，并且不受黑白名单影响</string>
     <string name="all_apps_sort_default">默认（跟随系统）</string>

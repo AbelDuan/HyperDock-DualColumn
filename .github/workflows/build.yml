@@ -1,0 +1,30 @@
+name: build-dualcolumn
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --install "platform-tools" "platforms;android-37" "build-tools;37.0.0"
+      - name: Build release APK
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleReleaseFast --no-daemon \
+            -PappVersionName=1.2.0 -PappVersionCode=3 \
+            -PbuildTime=$(date -u +%Y%m%d%H%M%S)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hyperdock-dualcolumn
+          path: app/build/outputs/apk/releaseFast/*.apk
+          if-no-files-found: error

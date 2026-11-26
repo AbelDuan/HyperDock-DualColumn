@@ -1,0 +1,254 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="module_description">Sidebar enhancements for HyperOS</string>
+
+    <!-- Compose / Miuix -->
+    <string name="nav_home">Home</string>
+    <string name="nav_settings">Settings</string>
+    <string name="about">About</string>
+
+    <string name="activated">Activated</string>
+    <string name="not_activated">Not Activated</string>
+    <string name="lsposed_service_unavailable">LSPosed service not connected</string>
+    <string name="lsposed_service_unavailable_summary">Please confirm that the module is enabled in LSPosed and reopen the app</string>
+    <string name="lsposed_version_unsupported">LSPosed version is too low</string>
+    <string name="update_lsposed">Please update LSPosed</string>
+    <string name="security_center_scope_missing">Security Center scope is not enabled</string>
+    <string name="enable_security_center_scope">Please select Security Center in the LSPosed scope</string>
+    <string name="framework_details">%1$s %2$s (%3$d) API %4$d</string>
+    <string name="software_version">Software version: %1$s</string>
+
+    <string name="system_version">System version</string>
+    <string name="app_version">Application version</string>
+    <string name="xposed_framework">Xposed framework</string>
+    <string name="device_model">Device model</string>
+    <string name="unknown">Unknown</string>
+
+    <!-- Sidebar -->
+    <string name="sidebar">Sidebar</string>
+    <string name="sidebar_behavior">Behavior</string>
+    <string name="sidebar_expand_all_apps">Auto-expand panel</string>
+    <string name="sidebar_expand_all_apps_summary">Show the all-apps panel as soon as the sidebar opens, animated together with the sidebar itself</string>
+    <string name="sidebar_sections_customization">Panel sections</string>
+    <string name="sidebar_sections_customization_summary">Choose which sections are shown in the all-apps panel</string>
+    <string name="sidebar_sections_order">Section order</string>
+    <string name="sidebar_sections_order_summary">Move visible sections up or down</string>
+    <string name="sidebar_section_all_apps">All apps</string>
+    <string name="sidebar_section_native_quick_functions">Quick functions</string>
+    <string name="sidebar_section_shortcuts">Shortcuts</string>
+    <string name="sidebar_section_quick_actions">Quick launch</string>
+    <string name="sidebar_section_move_up">Move up</string>
+    <string name="sidebar_section_move_down">Move down</string>
+    <string name="sidebar_panel_cache">Preload panel</string>
+    <string name="sidebar_staggered_expand">Staggered expansion</string>
+    <string name="sidebar_staggered_expand_summary">Animate the all-apps panel separately for a staggered effect with the sidebar</string>
+    <string name="sidebar_panel_cache_summary">Keep the initialized panel for faster subsequent openings</string>
+    <string name="sidebar_two_columns">Two-column sidebar</string>
+    <string name="sidebar_two_columns_summary">Lay the sidebar apps out in two columns; in portrait the sidebar falls back to one column while the all-apps panel is open, in landscape it stays two columns</string>
+    <string name="sidebar_two_columns_conflict">Two-column sidebar conflicts with automatic expansion</string>
+    <string name="sidebar_quick_slot">Icon next to quick capture</string>
+    <string name="sidebar_quick_slot_summary">Not set — quick capture is centered on its own row</string>
+    <string name="sidebar_quick_slot_none">Not set</string>
+    <string name="sidebar_quick_slot_current">Current: %1$s</string>
+    <string name="sidebar_quick_slot_group_apps">Apps</string>
+    <string name="sidebar_quick_slot_group_shortcuts">Built-in shortcuts</string>
+    <string name="sidebar_quick_slot_group_quick_launch">Quick launch</string>
+    <string name="sidebar_quick_slot_empty">Nothing available yet</string>
+    <string name="all_apps">All apps</string>
+    <string name="all_apps_custom_enabled">Use custom app list</string>
+    <string name="all_apps_custom_enabled_summary">Choose which apps are shown in the all-apps panel</string>
+    <string name="all_apps_custom_mode">Selection mode</string>
+    <string name="all_apps_whitelist">Whitelist: show selected apps</string>
+    <string name="all_apps_blacklist">Blacklist: hide selected apps</string>
+    <string name="all_apps_custom_apps">Custom apps</string>
+    <string name="all_apps_custom_apps_summary">Select apps to show or hide</string>
+    <string name="all_apps_no_apps">No launchable apps found</string>
+    <string name="search_apps">Search apps</string>
+
+    <!-- Shortcuts -->
+    <string name="shortcuts">Shortcuts</string>
+    <string name="shortcuts_summary">Show custom shortcuts in the all-apps panel and dock</string>
+    <string name="sidebar_auto_close">Auto-collapse after tap</string>
+    <string name="sidebar_auto_close_summary">Which injected entries collapse the sidebar after being tapped.</string>
+    <string name="sidebar_auto_close_off">Never</string>
+    <string name="sidebar_auto_close_shortcuts">Built-in shortcuts only</string>
+    <string name="sidebar_auto_close_quick_launch">Quick launch only</string>
+    <string name="sidebar_auto_close_all">Every scenario</string>
+    <string name="shortcut_custom_style">Custom style</string>
+    <string name="shortcut_custom_style_summary">Customize the background and icon colors for the off and on states</string>
+    <string name="shortcut_style_background_off">Off-state background</string>
+    <string name="shortcut_style_background_on">On-state background</string>
+    <string name="shortcut_style_icon_on">On-state color</string>
+    <string name="shortcut_style_icon_off">Off-state color</string>
+    <string name="color_picker_value">Color value</string>
+    <string name="color_picker_invalid">Enter #RRGGBB or #AARRGGBB</string>
+    <string name="edit">Edit</string>
+    <string name="item_name">Name</string>
+    <string name="color_icon">Color icon</string>
+    <string name="choose_icon">Choose icon</string>
+    <string name="restore_default_icon">Restore default icon</string>
+    <string name="quick_functions">Quick launch</string>
+    <string name="quick_functions_summary">Quickly launch selected application activities from the sidebar</string>
+    <string name="quick_functions_added">Added</string>
+    <string name="quick_functions_empty">No quick actions added</string>
+    <string name="quick_functions_add">Add quick action</string>
+    <string name="quick_functions_import">Import</string>
+    <string name="quick_functions_add_manual">Add manually</string>
+    <string name="quick_functions_select_app">Select app</string>
+    <string name="quick_functions_select_activity">Select activity</string>
+    <string name="quick_functions_save_title">Save this quick action?</string>
+    <string name="quick_functions_name">Name</string>
+    <string name="quick_functions_package">Package name</string>
+    <string name="quick_functions_activity">Activity class</string>
+    <string name="quick_functions_launch_mode">Launch method</string>
+    <string name="quick_functions_launch_mode_activity">Activity</string>
+    <string name="quick_functions_launch_mode_url">URL</string>
+    <string name="quick_functions_url">URL address</string>
+    <string name="quick_functions_url_invalid">Enter a valid URL</string>
+    <string name="quick_functions_choose_icon">Choose icon</string>
+    <string name="quick_functions_export">Export quick launch</string>
+    <string name="quick_functions_no_activities">No exported activities found</string>
+    <string name="quick_functions_search_activities">Search activities</string>
+    <string name="delete">Delete</string>
+    <string name="next">Next</string>
+    <string name="shortcuts_added">Added</string>
+    <string name="shortcuts_not_added">Not added</string>
+    <string name="shortcut_owner_system">System apps</string>
+    <string name="shortcut_owner_hyperisland">HyperIsland</string>
+    <string name="shortcut_hyperisland_motion_photo">Live recording</string>
+    <string name="shortcut_hyperisland_screen_record">Screen recording</string>
+    <string name="shortcut_hyperisland_requirement">Using this shortcut requires installing and enabling the Screen Recording Island feature in HyperIsland.</string>
+    <string name="shortcut_screenshot">Screenshot</string>
+    <string name="shortcut_wifi">WLAN</string>
+    <string name="shortcut_bluetooth">Bluetooth</string>
+    <string name="shortcut_flashlight">Flashlight</string>
+    <string name="shortcut_airplane_mode">Airplane mode</string>
+    <string name="shortcut_mobile_data">Mobile data</string>
+    <string name="shortcut_location">Location</string>
+    <string name="shortcut_auto_rotate">Auto-rotate</string>
+    <string name="shortcut_dnd">Do not disturb</string>
+    <string name="shortcut_dark_mode">Dark mode</string>
+    <string name="shortcut_hotspot">Hotspot</string>
+    <string name="shortcut_cast">Cast</string>
+    <string name="shortcut_mute">Mute</string>
+    <!-- 系统磁贴补充项，与 SystemTileSpecs 的 id 一一对应 -->
+    <string name="shortcut_nfc">NFC</string>
+    <string name="shortcut_eye_comfort">Eye comfort</string>
+    <string name="shortcut_night_mode">Night mode</string>
+    <string name="shortcut_power_saver">Battery saver</string>
+    <string name="shortcut_super_saver">Extreme battery saver</string>
+    <string name="shortcut_sync">Sync</string>
+    <string name="shortcut_vibrate">Vibrate</string>
+    <string name="shortcut_auto_brightness">Auto brightness</string>
+    <string name="shortcut_screen_lock">Lock screen</string>
+    <string name="shortcut_one_handed">One-handed mode</string>
+    <string name="shortcut_work_mode">Work mode</string>
+    <string name="shortcut_color_inversion">Color inversion</string>
+    <string name="shortcut_color_correction">Color correction</string>
+    <string name="shortcut_extra_dim">Extra dim</string>
+    <string name="shortcut_microphone">Microphone access</string>
+    <string name="shortcut_camera_access">Camera access</string>
+    <string name="shortcut_task_manager">Task manager</string>
+    <string name="shortcut_alarm">Alarm</string>
+    <string name="shortcut_settings">Settings</string>
+    <string name="shortcut_satellite">Satellite</string>
+    <string name="shortcut_cooling_fan">Cooling fan</string>
+    <string name="shortcut_aspect_ratio">Aspect ratio</string>
+    <string name="shortcut_vowifi">Wi-Fi calling</string>
+    <string name="shortcut_wallet">Wallet</string>
+    <string name="shortcut_google_pay">Google Pay</string>
+    <string name="shortcut_google_home">Google Home</string>
+    <string name="shortcut_device_controls">Device controls</string>
+
+    <!-- Misc -->
+    <string name="misc">Misc</string>
+    <string name="hide_desktop_icon">Hide desktop icon</string>
+    <string name="hide_desktop_icon_summary">Hide the app icon from launcher. Open via LSPosed Manager after hiding</string>
+    <string name="check_update">Check for updates on launch</string>
+    <string name="check_update_summary">Automatically check for new versions when the app starts</string>
+    <string name="debug_log">Show debug logs</string>
+    <string name="debug_log_summary">When enabled, Hook debug logs are output; when disabled, only warning and error logs are kept</string>
+
+    <!-- Appearance -->
+    <string name="appearance">Appearance</string>
+    <string name="theme">Theme</string>
+    <string name="follow_system">Follow system</string>
+    <string name="light">Light</string>
+    <string name="dark">Dark</string>
+    <string name="theme_color">Theme color</string>
+    <string name="theme_color_summary">Customize the app accent color</string>
+    <string name="monet_color">Monet color</string>
+    <string name="monet_color_summary">Generate software color matching using selected colors</string>
+    <string name="floating_navigation_bar">Floating bottom bar</string>
+    <string name="floating_navigation_bar_summary">Use a floating bottom bar</string>
+    <string name="liquid_glass_navigation_bar">Liquid glass bottom bar</string>
+    <string name="liquid_glass_navigation_bar_summary">Replace the floating bottom bar with a liquid glass effect</string>
+    <string name="interface_blur">Blur</string>
+    <string name="interface_blur_summary">Enable interface blur, including top and bottom bars</string>
+    <string name="predictive_back_distance">Predicted back distance</string>
+    <string name="predictive_back_distance_summary">Adjust the maximum traverse distance of the page in the back gesture</string>
+    <string name="reset_default">Restore default</string>
+    <string name="language">Language</string>
+    <string name="chinese">简体中文</string>
+    <string name="english">English</string>
+
+    <!-- About -->
+    <string name="about_developer">Developer</string>
+    <string name="developer_name">芥子</string>
+    <string name="developer_handle">@1812z</string>
+    <string name="developer_avatar">Developer avatar</string>
+    <string name="about_module">Module</string>
+    <string name="about_project">Project</string>
+    <string name="github">GitHub</string>
+    <string name="github_summary">1812z/hyperdock</string>
+    <string name="check_update_action">Check for updates</string>
+    <string name="new_version_found">New version available</string>
+    <string name="current_version">Current version: %1$s</string>
+    <string name="latest_version">Latest version: %1$s</string>
+    <string name="already_latest">Already on the latest version</string>
+    <string name="update_check_failed">Check for updates failed</string>
+    <string name="update_check_failed_message">Failed to check for updates, please check the network connection</string>
+    <string name="view">Check</string>
+
+    <!-- Home -->
+    <string name="documentation">Project home</string>
+    <string name="documentation_summary">Click to view the project page and usage guide</string>
+    <string name="related_resources">Releases</string>
+    <string name="related_resources_summary">Download the latest module builds</string>
+
+    <!-- Restart scope -->
+    <string name="restart_scope">Restart scope</string>
+    <string name="restart_scope_summary">Select the scoped app to restart via root</string>
+    <string name="restart_root_required">Please check if ROOT permission has been granted to this app</string>
+    <string name="security_center">Security Center</string>
+    <string name="system_ui">System UI</string>
+
+    <!-- Backup & restore -->
+    <string name="backup_restore">Backup &amp; restore</string>
+    <string name="config">Config</string>
+    <string name="backup_export_file">Export to file</string>
+    <string name="backup_export_file_summary">Save the current configuration as a JSON file</string>
+    <string name="backup_export_clipboard">Copy to clipboard</string>
+    <string name="backup_export_clipboard_summary">Copy the current configuration JSON to the clipboard</string>
+    <string name="backup_import_file">Import from file</string>
+    <string name="backup_import_file_summary">Restore the configuration from a JSON file</string>
+    <string name="backup_import_clipboard">Import from clipboard</string>
+    <string name="backup_import_clipboard_summary">Restore the configuration from clipboard JSON</string>
+
+    <string name="backup_exported">Exported</string>
+    <string name="backup_copied">Copied to clipboard</string>
+    <string name="backup_imported">Imported %1$d items</string>
+    <string name="backup_export_failed">Export failed</string>
+    <string name="backup_import_failed">Import failed</string>
+    <string name="backup_error_invalid_format">Invalid configuration format</string>
+    <string name="backup_error_no_file_selected">No file selected</string>
+    <string name="backup_error_empty_clipboard">Clipboard is empty</string>
+
+    <!-- Common -->
+    <string name="cancel">Cancel</string>
+    <string name="confirm">Confirm</string>
+    <string name="save">Save</string>
+    <string name="back">Back</string>
+    <string name="slider_input_value">Value</string>
+    <string name="slider_input_range">Enter a value from %1$s to %2$s</string>
+</resources>

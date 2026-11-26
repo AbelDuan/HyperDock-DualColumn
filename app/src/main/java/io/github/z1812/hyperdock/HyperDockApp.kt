@@ -34,8 +34,26 @@ class HyperDockApp : Application(), XposedServiceHelper.OnServiceListener {
     override fun onCreate() {
         super.onCreate()
         AppLocaleController.apply(this, configPrefs.getString(PrefKeys.LOCALE, "").orEmpty())
+        migrateRecentSortConfig()
         XposedServiceHelper.registerListener(this)
         configPrefs.registerOnSharedPreferenceChangeListener(configPrefsListener)
+    }
+
+    /** 把旧的单选排序设置迁移成“勾选来源 + 顺序”，只做一次。 */
+    private fun migrateRecentSortConfig() {
+        val old = configPrefs.getString(PrefKeys.ALL_APPS_SORT_MODE, "").orEmpty()
+        if (old.isBlank()) return
+        val editor = configPrefs.edit()
+        if (old == "recent_open" || old == "recent_task") {
+            val other = if (old == "recent_open") "recent_task" else "recent_open"
+            val openKey = PrefKeys.ALL_APPS_RECENT_OPEN_ENABLED
+            val taskKey = PrefKeys.ALL_APPS_RECENT_TASK_ENABLED
+            if (!configPrefs.contains(openKey) && !configPrefs.contains(taskKey)) {
+                editor.putBoolean(if (old == "recent_open") openKey else taskKey, true)
+                editor.putString(PrefKeys.ALL_APPS_RECENT_ORDER, "$old,$other")
+            }
+        }
+        editor.remove(PrefKeys.ALL_APPS_SORT_MODE).apply()
     }
 
     override fun onTerminate() {

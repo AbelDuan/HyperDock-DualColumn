@@ -2,6 +2,7 @@ package io.github.z1812.hyperdock.compose.page.settings
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
@@ -68,6 +69,7 @@ internal fun AllAppsPage(
 ) {
     val enabled = rememberBooleanPreference(prefs, PrefKeys.ALL_APPS_CUSTOM_ENABLED, false)
     val mode = rememberStringPreference(prefs, PrefKeys.ALL_APPS_CUSTOM_MODE, MODE_BLACKLIST)
+    val showSystem = rememberBooleanPreference(prefs, PrefKeys.ALL_APPS_SHOW_SYSTEM, true)
 
     DetailPage(title = stringResource(R.string.all_apps), onBack = onBack) {
         item {
@@ -81,6 +83,15 @@ internal fun AllAppsPage(
                 ) {
                     enabled.value = it
                     prefs.putBoolean(PrefKeys.ALL_APPS_CUSTOM_ENABLED, it)
+                }
+                PreferenceSwitch(
+                    title = stringResource(R.string.all_apps_show_system),
+                    summary = stringResource(R.string.all_apps_show_system_summary),
+                    icon = null,
+                    checked = showSystem.value,
+                ) {
+                    showSystem.value = it
+                    prefs.putBoolean(PrefKeys.ALL_APPS_SHOW_SYSTEM, it)
                 }
                 PreferenceDropdown(
                     title = stringResource(R.string.all_apps_custom_mode),
@@ -116,6 +127,7 @@ internal fun AllAppsPage(
 internal fun CustomAppsPage(prefs: PrefsRepository, onBack: () -> Unit) {
     val context = LocalContext.current
     val selected = rememberStringSetPreference(prefs, PrefKeys.ALL_APPS_CUSTOM_PACKAGES)
+    val showSystem = rememberBooleanPreference(prefs, PrefKeys.ALL_APPS_SHOW_SYSTEM, true)
     val appsState = produceState<List<LaunchableApp>?>(initialValue = null, key1 = context) {
         value = withContext(Dispatchers.IO) { loadLaunchableApps(context) }
     }
@@ -129,8 +141,8 @@ internal fun CustomAppsPage(prefs: PrefsRepository, onBack: () -> Unit) {
     }
     var query by remember { mutableStateOf("") }
     var searchExpanded by remember { mutableStateOf(false) }
-    val filteredApps = remember(orderedApps, query) {
-        val source = orderedApps ?: emptyList()
+    val filteredApps = remember(orderedApps, query, showSystem.value) {
+        val source = orderedApps?.filter { showSystem.value || !it.isSystem } ?: emptyList()
         val needle = query.trim().lowercase()
         if (needle.isEmpty()) source else source.filter {
             it.label.lowercase().contains(needle) || it.packageName.lowercase().contains(needle)
@@ -238,6 +250,7 @@ private data class LaunchableApp(
     val packageName: String,
     val label: String,
     val icon: Bitmap,
+    val isSystem: Boolean,
 )
 
 private fun loadLaunchableApps(context: Context): List<LaunchableApp> {
@@ -250,7 +263,10 @@ private fun loadLaunchableApps(context: Context): List<LaunchableApp> {
                 ?.takeIf { it.isNotBlank() } ?: info.packageName
             val icon = runCatching { info.loadIcon(pm).toBitmap(context) }.getOrNull()
                 ?: return@mapNotNull null
-            LaunchableApp(info.packageName, label, icon)
+            val flags = info.applicationInfo?.flags ?: 0
+            val isSystem = flags and
+                (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+            LaunchableApp(info.packageName, label, icon, isSystem)
         }
         .distinctBy { it.packageName }
         .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label })

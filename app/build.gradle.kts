@@ -13,7 +13,7 @@ plugins {
 
 android {
     namespace = "io.github.z1812.hyperdock"
-    compileSdk = 36
+    compileSdk = 37
 
     buildFeatures {
         buildConfig = true
@@ -61,7 +61,7 @@ android {
     defaultConfig {
         applicationId = "io.github.z1812.hyperdock"
         minSdk = 35
-        targetSdk = 36
+        targetSdk = 37
         versionCode = appVersionCode
         versionName = appVersionName
         buildConfigField("String", "BUILD_TIME", "\"$buildTime\"")

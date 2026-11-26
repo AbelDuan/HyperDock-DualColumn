@@ -131,3 +131,10 @@ Made with ❤️ for HyperOS users
 - 双列侧边栏来自上游 PR #2 `feat/sidebar-two-columns-and-autoclose`（merge commit `e82d5e39`），该 PR 已包含在上述基线中；本仓库保留完整提交内容，并提供可直接编译的 Actions 工作流。
 - 相关文件：`app/src/main/java/io/github/z1812/hyperdock/xposed/hook/Sidebar/SidebarColumnsHook.kt`、`SidebarDockSlotHook.kt`、`compose/page/settings/QuickSlotPage.kt`。
 - 构建：Actions → `build-dualcolumn` → Run workflow；产物为 `hyperdock-dualcolumn` artifact。
+
+## 系统应用过滤（本仓库改动）
+
+- 新增配置 `all_apps_show_system`（默认 `true`，保持旧行为）。
+- 设置页「全部应用」新增开关「显示系统应用」；关闭后进入「自定义应用」勾选黑/白名单时只列出第三方应用。
+- Hook 侧 `SidebarShortcutController.filterCustomApps` 同步该开关：关闭后原生全部应用列表也隐藏系统应用，再执行黑/白名单规则。
+- 系统应用判定同时使用 `FLAG_SYSTEM` 与 `FLAG_UPDATED_SYSTEM_APP`。

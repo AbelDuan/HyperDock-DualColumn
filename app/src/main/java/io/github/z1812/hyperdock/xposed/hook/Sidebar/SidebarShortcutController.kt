@@ -1012,20 +1012,40 @@ internal object SidebarShortcutController {
         return hasModelItem && (hasNativeTitle || value.size >= 32)
     }
 
-    /** 根据设置页的黑/白名单过滤原生 Model.App；其它标题、快捷方式保持不变。 */
+    /**
+     * 先按「是否显示系统应用」过滤，再按黑/白名单过滤原生 Model.App。
+     * 其它标题、快捷方式保持不变。系统应用标记与设置页一致：同时认
+     * FLAG_SYSTEM 和 FLAG_UPDATED_SYSTEM_APP（预装应用升级后仍算系统应用）。
+     */
     private fun filterCustomApps(original: List<Any>): List<Any> {
-        if (!ConfigManager.getBoolean(PrefKeys.ALL_APPS_CUSTOM_ENABLED, false)) return original
+        val enabled = ConfigManager.getBoolean(PrefKeys.ALL_APPS_CUSTOM_ENABLED, false)
+        val showSystem = ConfigManager.getBoolean(PrefKeys.ALL_APPS_SHOW_SYSTEM, true)
+        if (!enabled && showSystem) return original
         val selected = ConfigManager.getStringSet(PrefKeys.ALL_APPS_CUSTOM_PACKAGES, emptySet())
         val whitelist = ConfigManager.getString(PrefKeys.ALL_APPS_CUSTOM_MODE, "blacklist") == "whitelist"
-        val filtered = original.filter { item ->
+        val systemFlags = android.content.pm.ApplicationInfo.FLAG_SYSTEM or
+            android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP
+        val systemCache = HashMap<String, Boolean>()
+        fun isSystemPackage(pkg: String): Boolean = systemCache.getOrPut(pkg) {
+            val flags = runCatching {
+                appContext()?.packageManager?.getApplicationInfo(pkg, 0)?.flags ?: 0
+            }.getOrDefault(0)
+            flags and systemFlags != 0
+        }
+        return original.filter { item ->
             val pkg = packageNameOf(item, selected)
             if (pkg.isNullOrEmpty()) {
                 true
+            } else if (!showSystem && isSystemPackage(pkg)) {
+                false
+            } else if (!enabled) {
+                true
+            } else if (whitelist) {
+                pkg in selected
             } else {
-                if (whitelist) pkg in selected else pkg !in selected
+                pkg !in selected
             }
         }
-        return filtered
     }
 
     private fun packageNameOf(item: Any, selected: Set<String>): String? {

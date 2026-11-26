@@ -50,6 +50,8 @@ object PrefKeys {
     const val ALL_APPS_CUSTOM_ENABLED = "all_apps_custom_enabled"
     const val ALL_APPS_CUSTOM_MODE = "all_apps_custom_mode"
     const val ALL_APPS_CUSTOM_PACKAGES = "all_apps_custom_packages"
+    /** 全部应用面板/黑白名单是否包含系统应用；默认 true 保持旧行为。 */
+    const val ALL_APPS_SHOW_SYSTEM = "all_apps_show_system"
 
     // 快捷方式
     const val SHORTCUTS_ENABLED = "shortcuts_enabled"
@@ -122,6 +124,7 @@ object PrefKeys {
         ALL_APPS_CUSTOM_ENABLED,
         ALL_APPS_CUSTOM_MODE,
         ALL_APPS_CUSTOM_PACKAGES,
+        ALL_APPS_SHOW_SYSTEM,
         SHORTCUTS_ENABLED,
         SHORTCUTS_ADDED,
         SHORTCUTS_ORDER,

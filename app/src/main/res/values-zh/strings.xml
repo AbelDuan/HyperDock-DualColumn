@@ -59,7 +59,9 @@
     <string name="all_apps_whitelist">白名单：仅显示已选择应用</string>
     <string name="all_apps_blacklist">黑名单：隐藏已选择应用</string>
     <string name="all_apps_custom_apps">自定义应用</string>
-    <string name="all_apps_custom_apps_summary">选择需要显示或隐藏的应用</string>
+    <string name="all_apps_custom_apps_summary">选择需要显示或隐藏的应用；列表随“显示系统应用”过滤</string>
+    <string name="all_apps_show_system">显示系统应用</string>
+    <string name="all_apps_show_system_summary">关闭后，全部应用列表和黑白名单只显示第三方应用</string>
     <string name="all_apps_no_apps">未找到可启动的应用</string>
     <string name="search_apps">搜索应用</string>
 

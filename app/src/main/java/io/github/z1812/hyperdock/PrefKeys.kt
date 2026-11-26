@@ -52,6 +52,8 @@ object PrefKeys {
     const val ALL_APPS_CUSTOM_PACKAGES = "all_apps_custom_packages"
     /** 全部应用面板/黑白名单是否包含系统应用；默认 true 保持旧行为。 */
     const val ALL_APPS_SHOW_SYSTEM = "all_apps_show_system"
+    /** 全部应用面板排序：default / recent_open / recent_task。 */
+    const val ALL_APPS_SORT_MODE = "all_apps_sort_mode"
 
     // 快捷方式
     const val SHORTCUTS_ENABLED = "shortcuts_enabled"
@@ -101,6 +103,7 @@ object PrefKeys {
         SIDEBAR_TWO_COLUMNS,
         SIDEBAR_QUICK_SLOT,
         SIDEBAR_AUTO_CLOSE_MODE,
+        ALL_APPS_SORT_MODE,
     )
 
     /** 需要同步到 Hook 进程、并参与导入导出的业务配置键。 */
@@ -125,6 +128,7 @@ object PrefKeys {
         ALL_APPS_CUSTOM_MODE,
         ALL_APPS_CUSTOM_PACKAGES,
         ALL_APPS_SHOW_SYSTEM,
+        ALL_APPS_SORT_MODE,
         SHORTCUTS_ENABLED,
         SHORTCUTS_ADDED,
         SHORTCUTS_ORDER,

@@ -140,8 +140,9 @@ Made with ❤️ for HyperOS users
 - 关闭该开关后，侧边栏全部应用列表先隐藏所有系统应用，再叠加黑名单规则。
 - 判定同时使用 `FLAG_SYSTEM` 与 `FLAG_UPDATED_SYSTEM_APP`。
 
-### 应用排序
-- 配置 `all_apps_sort_mode`：`default`（跟随系统）/ `recent_open`（最近打开优先）/ `recent_task`（最近任务中的 APP 优先）。
+### 最近应用置顶
+- 两个独立勾选项：`all_apps_recent_open_enabled`（最近打开）与 `all_apps_recent_task_enabled`（最近任务中的 APP），可同时勾选；`all_apps_recent_order` 保存用户用箭头调整的先后顺序。
 - 最近数据源：`UsageStatsManager.lastTimeUsed`（最近打开）与 `ActivityManager.getRecentTasks` 反射（最近任务），Hook 运行在安全中心进程，具备相应权限；结果按包名去重并缓存 20 秒。
-- 最近应用**置顶且绕过黑白名单及系统应用过滤**，无论名单如何设置都显示在最前面；其余应用保持原生相对顺序。
+- 勾选的来源按顺序合并后置顶，**绕过黑白名单及系统应用过滤**，无论名单如何设置都显示在最前面；其余应用保持原生相对顺序。
+- 旧的单选配置 `all_apps_sort_mode` 在 App 启动时一次性迁移到新键后删除。
 - 数据源文件：`xposed/hook/Sidebar/SidebarRecentApps.kt`。

@@ -132,9 +132,16 @@ Made with ❤️ for HyperOS users
 - 相关文件：`app/src/main/java/io/github/z1812/hyperdock/xposed/hook/Sidebar/SidebarColumnsHook.kt`、`SidebarDockSlotHook.kt`、`compose/page/settings/QuickSlotPage.kt`。
 - 构建：Actions → `build-dualcolumn` → Run workflow；产物为 `hyperdock-dualcolumn` artifact。
 
-## 系统应用过滤（本仓库改动）
+## 本仓库改动：系统应用过滤与应用排序
 
-- 新增配置 `all_apps_show_system`（默认 `true`，保持旧行为）。
-- 设置页「全部应用」新增开关「显示系统应用」；关闭后进入「自定义应用」勾选黑/白名单时只列出第三方应用。
-- Hook 侧 `SidebarShortcutController.filterCustomApps` 同步该开关：关闭后原生全部应用列表也隐藏系统应用，再执行黑/白名单规则。
-- 系统应用判定同时使用 `FLAG_SYSTEM` 与 `FLAG_UPDATED_SYSTEM_APP`。
+### 系统应用过滤
+- 配置 `all_apps_show_system`（默认 `true`），**只在黑名单模式生效**；白名单模式忽略该开关，设置页也隐藏它。
+- 名单勾选页始终列出全部应用：系统应用是否显示与名单内容无关，系统应用同样可以加入黑名单。
+- 关闭该开关后，侧边栏全部应用列表先隐藏所有系统应用，再叠加黑名单规则。
+- 判定同时使用 `FLAG_SYSTEM` 与 `FLAG_UPDATED_SYSTEM_APP`。
+
+### 应用排序
+- 配置 `all_apps_sort_mode`：`default`（跟随系统）/ `recent_open`（最近打开优先）/ `recent_task`（最近任务中的 APP 优先）。
+- 最近数据源：`UsageStatsManager.lastTimeUsed`（最近打开）与 `ActivityManager.getRecentTasks` 反射（最近任务），Hook 运行在安全中心进程，具备相应权限；结果按包名去重并缓存 20 秒。
+- 最近应用**置顶且绕过黑白名单及系统应用过滤**，无论名单如何设置都显示在最前面；其余应用保持原生相对顺序。
+- 数据源文件：`xposed/hook/Sidebar/SidebarRecentApps.kt`。

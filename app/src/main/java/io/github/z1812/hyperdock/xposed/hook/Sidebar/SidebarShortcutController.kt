@@ -891,17 +891,25 @@ internal object SidebarShortcutController {
         // Remove our previous models first so deleting a quick launch entry also
         // removes its stale icon/title from the sidebar on the next refresh.
         val source = original.filterNot { isInjectedTitle(it) || isInjectedShortcut(it) }
-        // 最近打开/最近任务中的应用置顶且绕过黑白名单；原生列表与它的包装
-        // 状态都走同一条注入路径，避免配置变化后出现两份不一致的列表。
-        val sortMode = ConfigManager.getString(
-            PrefKeys.ALL_APPS_SORT_MODE,
-            SidebarRecentApps.SORT_DEFAULT,
-        )
-        val rankedPackages = if (sortMode == SidebarRecentApps.SORT_DEFAULT) {
-            emptyList()
-        } else {
-            SidebarRecentApps.rankedPackages(appContext(), sortMode)
+        // 用户勾选的最近来源按自定义顺序依次置顶，且绕过黑白名单；
+        // 原生列表与它的包装状态都走同一条注入路径，避免两份列表不一致。
+        val openEnabled = ConfigManager.getBoolean(PrefKeys.ALL_APPS_RECENT_OPEN_ENABLED, false)
+        val taskEnabled = ConfigManager.getBoolean(PrefKeys.ALL_APPS_RECENT_TASK_ENABLED, false)
+        val sourceOrder = ConfigManager.getString(
+            PrefKeys.ALL_APPS_RECENT_ORDER,
+            "recent_open,recent_task",
+        ).split(',').map(String::trim)
+        val context = appContext()
+        val ranked = ArrayList<String>()
+        sourceOrder.forEach { source ->
+            when {
+                source == SidebarRecentApps.SORT_RECENT_OPEN && openEnabled ->
+                    ranked.addAll(SidebarRecentApps.rankedPackages(context, source))
+                source == SidebarRecentApps.SORT_RECENT_TASK && taskEnabled ->
+                    ranked.addAll(SidebarRecentApps.rankedPackages(context, source))
+            }
         }
+        val rankedPackages = ranked.distinct()
         val filtered = filterCustomApps(source, rankedPackages.toHashSet())
         cachedNativeModels = source.toList()
         val quickFunctions = if (SidebarSectionConfig.enabled(CUSTOM_QUICK_ACTIONS, PrefKeys.QUICK_FUNCTIONS_ENABLED)) {

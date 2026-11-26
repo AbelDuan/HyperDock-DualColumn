@@ -891,9 +891,18 @@ internal object SidebarShortcutController {
         // Remove our previous models first so deleting a quick launch entry also
         // removes its stale icon/title from the sidebar on the next refresh.
         val source = original.filterNot { isInjectedTitle(it) || isInjectedShortcut(it) }
-        // Preserve the configured app whitelist/blacklist. The native list and
-        // its state wrapper are both passed through this same injection path.
-        val filtered = filterCustomApps(source)
+        // 最近打开/最近任务中的应用置顶且绕过黑白名单；原生列表与它的包装
+        // 状态都走同一条注入路径，避免配置变化后出现两份不一致的列表。
+        val sortMode = ConfigManager.getString(
+            PrefKeys.ALL_APPS_SORT_MODE,
+            SidebarRecentApps.SORT_DEFAULT,
+        )
+        val rankedPackages = if (sortMode == SidebarRecentApps.SORT_DEFAULT) {
+            emptyList()
+        } else {
+            SidebarRecentApps.rankedPackages(appContext(), sortMode)
+        }
+        val filtered = filterCustomApps(source, rankedPackages.toHashSet())
         cachedNativeModels = source.toList()
         val quickFunctions = if (SidebarSectionConfig.enabled(CUSTOM_QUICK_ACTIONS, PrefKeys.QUICK_FUNCTIONS_ENABLED)) {
             SidebarQuickLaunchConfig.ids()
@@ -906,7 +915,10 @@ internal object SidebarShortcutController {
             .filter { it.isNotBlank() }
         val ordered = SidebarShortcutCatalog.orderIds(added, customOrder)
         val dividerIndex = filtered.indexOfFirst { isDividerModel(it) }
-        val nativeAllApps = if (dividerIndex >= 0) filtered.take(dividerIndex) else filtered
+        val nativeAllApps = sortByRecent(
+            if (dividerIndex >= 0) filtered.take(dividerIndex) else filtered,
+            rankedPackages,
+        )
         // Divider is a layout separator, not part of either native section.
         // Keep it out of the section payload so reordering cannot move it with
         // one particular section; it is inserted between rendered sections below.
@@ -1012,17 +1024,31 @@ internal object SidebarShortcutController {
         return hasModelItem && (hasNativeTitle || value.size >= 32)
     }
 
+    /** 最近应用按数据源顺序置顶，其余应用保持原生相对顺序（稳定排序）。 */
+    private fun sortByRecent(items: List<Any>, ranked: List<String>): List<Any> {
+        if (ranked.isEmpty()) return items
+        val rank = HashMap<String, Int>()
+        ranked.forEachIndexed { index, pkg -> if (pkg !in rank) rank[pkg] = index }
+        return items.sortedWith(compareBy<Any> { item ->
+            val pkg = packageNameOf(item, emptySet())
+            if (pkg != null && pkg in rank) rank[pkg]!! else Int.MAX_VALUE
+        })
+    }
+
     /**
-     * 先按「是否显示系统应用」过滤，再按黑/白名单过滤原生 Model.App。
-     * 其它标题、快捷方式保持不变。系统应用标记与设置页一致：同时认
-     * FLAG_SYSTEM 和 FLAG_UPDATED_SYSTEM_APP（预装应用升级后仍算系统应用）。
+     * 黑名单模式下可额外隐藏系统应用；白名单模式忽略该开关。
+     * [bypassPackages] 是排序模式选出的最近应用，它们不受任何名单/系统过滤影响。
+     * 其它标题、快捷方式保持不变。系统应用标记同时认 FLAG_SYSTEM 与
+     * FLAG_UPDATED_SYSTEM_APP（预装应用升级后仍算系统应用）。
      */
-    private fun filterCustomApps(original: List<Any>): List<Any> {
-        val enabled = ConfigManager.getBoolean(PrefKeys.ALL_APPS_CUSTOM_ENABLED, false)
-        val showSystem = ConfigManager.getBoolean(PrefKeys.ALL_APPS_SHOW_SYSTEM, true)
-        if (!enabled && showSystem) return original
+    private fun filterCustomApps(
+        original: List<Any>,
+        bypassPackages: Set<String> = emptySet(),
+    ): List<Any> {
+        if (!ConfigManager.getBoolean(PrefKeys.ALL_APPS_CUSTOM_ENABLED, false)) return original
         val selected = ConfigManager.getStringSet(PrefKeys.ALL_APPS_CUSTOM_PACKAGES, emptySet())
         val whitelist = ConfigManager.getString(PrefKeys.ALL_APPS_CUSTOM_MODE, "blacklist") == "whitelist"
+        val hideSystem = !whitelist && !ConfigManager.getBoolean(PrefKeys.ALL_APPS_SHOW_SYSTEM, true)
         val systemFlags = android.content.pm.ApplicationInfo.FLAG_SYSTEM or
             android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP
         val systemCache = HashMap<String, Boolean>()
@@ -1034,16 +1060,12 @@ internal object SidebarShortcutController {
         }
         return original.filter { item ->
             val pkg = packageNameOf(item, selected)
-            if (pkg.isNullOrEmpty()) {
-                true
-            } else if (!showSystem && isSystemPackage(pkg)) {
-                false
-            } else if (!enabled) {
-                true
-            } else if (whitelist) {
-                pkg in selected
-            } else {
-                pkg !in selected
+            when {
+                pkg.isNullOrEmpty() -> true
+                pkg in bypassPackages -> true
+                hideSystem && isSystemPackage(pkg) -> false
+                whitelist -> pkg in selected
+                else -> pkg !in selected
             }
         }
     }
@@ -1777,6 +1799,7 @@ internal object SidebarShortcutController {
     private fun installConfigChangeListener() {
         if (configListenerRegistered) return
         ConfigManager.addChangeListener {
+            SidebarRecentApps.invalidate()
             synchronized(quickIconLock) {
                 quickIconGeneration++
                 quickIconCache.evictAll()

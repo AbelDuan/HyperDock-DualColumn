@@ -112,6 +112,12 @@ object SidebarColumnsHook : BaseHook() {
     /** recycler -> 宿主原本的 (SpanSizeLookup, 原列数)；用它继承“标题占满整行”的规则。 */
     /** 应用面板 SpanSizeLookup -> 它的 GridLayoutManager，用于实时读取真实 spanCount。 */
     private val allAppsGridByLookup = Collections.synchronizedMap(WeakHashMap<Any, Any>())
+    /** 确认属于应用面板的 GridLayoutManager；它们的 spanCount 锁定为目标列数。 */
+    private val allAppsGrids = Collections.newSetFromMap(WeakHashMap<Any, Boolean>())
+    /** 面板 grid -> 目标列数。 */
+    private val allAppsGridColumns = Collections.synchronizedMap(WeakHashMap<Any, Int>())
+    /** setSpanCount 是否已 hook（只装一次）。 */
+    @Volatile private var spanCountLocked = false
     private val allAppsOriginalLookups =
         Collections.synchronizedMap(WeakHashMap<View, Pair<Any, Int>>())
     /** adapter -> (数据列表, 主类型)；列表引用变化时重算。 */
@@ -673,24 +679,43 @@ object SidebarColumnsHook : BaseHook() {
         val renamed = lm.javaClass.methods.firstOrNull {
             it.name == "Q" && it.parameterCount == 1 && it.parameterTypes[0] == Integer.TYPE
         }
+        // 只走官方 setSpanCount；直接改字段会绕过库自己的缓存失效，
+        // 那次越界闪退就是这条路径造成的，已经删掉。
         if (renamed != null && runCatching { renamed.invoke(lm, columns) }.isSuccess) {
             invalidateSpanCache(lm)
-            return
         }
-        generateSequence(lm.javaClass as Class<*>?) { it.superclass }
-            .flatMap { it.declaredFields.asSequence() }
-            .firstOrNull { field ->
-                field.type == Integer.TYPE && field.name.contains("f4975b")
-            }?.let { field ->
-                runCatching {
-                    field.isAccessible = true
-                    field.set(lm, columns)
-                    lm.javaClass.methods.firstOrNull {
-                        it.parameterCount == 0 && it.name.contains("requestLayout", ignoreCase = true)
-                    }?.let { runCatching { it.invoke(lm) } }
+    }
+
+    /**
+     * 把应用面板的 spanCount 钉死为目标列数。
+     *
+     * 崩溃根因：宿主中途把 spanCount 改小，而我们的 SpanSizeLookup 仍返回 4，
+     * GridLayoutManager 按 spanCount 分配的索引数组就会越界。拦下 setSpanCount
+     * （R8 改名为 Q(int)）让面板列数恒定，标题才能安全地占满整行。
+     */
+    private fun lockSpanCount(module: XposedModule, grid: Any, columns: Int) {
+        if (spanCountLocked) return
+        val gridType = gridClass ?: return
+        val setter = gridType.methods.firstOrNull {
+            it.returnType == Void.TYPE && it.parameterCount == 1 &&
+                it.parameterTypes[0] == Integer.TYPE
+        } ?: return
+        setter.isAccessible = true
+        runCatching {
+            module.hook(setter).intercept { chain ->
+                val target = chain.thisObject
+                if (target == null || !allAppsGrids.contains(target)) {
+                    return@intercept chain.proceed()
                 }
-                invalidateSpanCache(lm)
+                val wanted = allAppsGridColumns[target] ?: return@intercept chain.proceed()
+                if ((chain.args.getOrNull(0) as? Int) == wanted) {
+                    return@intercept chain.proceed()
+                }
+                chain.proceed(arrayOf<Any?>(wanted))
             }
+            spanCountLocked = true
+            logWarn(module, "all-apps span count locked via ${setter.name}")
+        }.onFailure { logWarn(module, "span count lock failed: ${it.message}") }
     }
 
     /**
@@ -1076,11 +1101,6 @@ object SidebarColumnsHook : BaseHook() {
      * 稳定之后再想标题满行的其它做法。
      */
     private fun installAllAppsSpanLookup(module: XposedModule, grid: Any, recycler: View, columns: Int) {
-        return
-    }
-
-    @Suppress("unused")
-    private fun installAllAppsSpanLookupLegacy(module: XposedModule, grid: Any, recycler: View, columns: Int) {
         if (!ensureSpanHook(module)) return
         val adapter = runCatching { getAdapterMethod?.invoke(recycler) }.getOrNull() ?: return
         val instance = runCatching { spanDefault?.getConstructor()?.newInstance() }.getOrNull() ?: return
@@ -1088,6 +1108,9 @@ object SidebarColumnsHook : BaseHook() {
         allAppsSpanLookups[instance] = adapter
         allAppsSpanRecyclers[adapter] = recycler
         allAppsGridByLookup[instance] = grid
+        allAppsGrids.add(grid)
+        allAppsGridColumns[grid] = columns
+        lockSpanCount(module, grid, columns)
         runCatching {
             spanSetter?.isAccessible = true
             spanSetter?.invoke(grid, instance)

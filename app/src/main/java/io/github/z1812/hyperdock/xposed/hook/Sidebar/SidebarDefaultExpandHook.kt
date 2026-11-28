@@ -35,8 +35,8 @@ object SidebarDefaultExpandHook : BaseHook() {
     const val PREF_ENABLED = PrefKeys.SIDEBAR_EXPAND_ALL_APPS
 
     private fun autoExpandEnabled(): Boolean =
-        ConfigManager.getBoolean(PREF_ENABLED, false) &&
-            !ConfigManager.getBoolean(PrefKeys.SIDEBAR_TWO_COLUMNS, false)
+        ConfigManager.getBoolean(PREF_ENABLED, true) &&
+            !SidebarColumnsHook.boxPanelVisible()
 
     /** 仅在“静默加入全部应用面板”期间为 true，用于跳过原生入场动画。 */
     private val silentAdd = AtomicBoolean(false)

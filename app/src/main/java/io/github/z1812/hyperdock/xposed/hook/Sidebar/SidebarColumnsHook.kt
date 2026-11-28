@@ -104,6 +104,8 @@ object SidebarColumnsHook : BaseHook() {
     private val appliedDocks = Collections.newSetFromMap(WeakHashMap<View, Boolean>())
     /** 全部应用面板的布局监听器，弱引用避免持有已销毁的 RecyclerView。 */
     private val allAppsFitters = Collections.synchronizedMap(WeakHashMap<View, View.OnLayoutChangeListener>())
+    /** 全部应用面板容器被我们改过的宽度，用来识别“旧目标宽度”的兄弟背景。 */
+    private val allAppsWidths = Collections.synchronizedMap(WeakHashMap<View, Int>())
 
     /** 自己调用 setLayoutManager 期间置位，避免被自己的 hook 再拦截一次。 */
     private val selfSetting = ThreadLocal<Boolean>()
@@ -418,15 +420,40 @@ object SidebarColumnsHook : BaseHook() {
         val target = targetWidth(context, columns)
         if (target <= 0) return
         val parent = recycler.parent as? ViewGroup ?: return
-        val params = parent.layoutParams ?: return
-        if (params.width != target) {
-            params.width = target
-            runCatching { parent.layoutParams = params }
+        widenAllAppsGroup(parent, recycler, target)
+        // 背景层通常是 TurboLayout 里与面板容器同宽的兄弟 View，只改容器本身
+        // 会让背景仍停在原来的窄宽度。再往上处理一层。
+        val grand = parent.parent as? ViewGroup
+        if (grand != null) {
+            widenAllAppsGroup(grand, parent, target)
+            applyTurboWidthField(grand, allAppsWidths[grand] ?: grand.width, target)
         }
         val selfParams = recycler.layoutParams
         if (selfParams != null && selfParams.width != ViewGroup.LayoutParams.MATCH_PARENT) {
             selfParams.width = ViewGroup.LayoutParams.MATCH_PARENT
             runCatching { recycler.layoutParams = selfParams }
+        }
+    }
+
+    /** 把容器及其同宽的兄弟背景一起改到目标宽度，避免只有列表变宽、背景不变。 */
+    private fun widenAllAppsGroup(group: ViewGroup, keep: View, target: Int) {
+        val params = group.layoutParams ?: return
+        val base = allAppsWidths[group] ?: params.width
+        if (params.width != target) {
+            params.width = target
+            runCatching { group.layoutParams = params }
+        }
+        allAppsWidths[group] = target
+        for (index in 0 until group.childCount) {
+            val child = group.getChildAt(index) ?: continue
+            if (child === keep) continue
+            val childParams = child.layoutParams ?: continue
+            val current = childParams.width
+            if (current != base && current != target && current != allAppsWidths[child]) continue
+            if (current == target) continue
+            childParams.width = target
+            allAppsWidths[child] = target
+            runCatching { child.layoutParams = childParams }
         }
     }
 

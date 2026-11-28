@@ -260,4 +260,8 @@
     <string name="back">Back</string>
     <string name="slider_input_value">Value</string>
     <string name="slider_input_range">Enter a value from %1$s to %2$s</string>
+    <string name="sidebar_columns_inner">Inner screen columns</string>
+    <string name="sidebar_columns_outer">Outer screen columns</string>
+    <string name="sidebar_columns_auto">Auto (follow two-column switch)</string>
+    <string name="sidebar_columns_summary">0 = auto, 1–6 = custom; inner screen falls back to one column while the all-apps panel is open</string>
 </resources>

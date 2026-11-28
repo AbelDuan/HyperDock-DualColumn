@@ -93,6 +93,34 @@ object ShortcutCatalog {
         }
     }
 
+    /**
+     * 已添加条目的兜底解析：目录缓存（SystemUI 探测结果）可能变化或缺失，
+     * 但用户已经添加的 id 必须始终能显示，否则点击“添加”会闪一下又消失。
+     */
+    fun resolveAdded(context: Context, id: String): ShortcutItem? {
+        all(context).firstOrNull { it.id == id }?.let { return it }
+        SystemTileSpecs.ALL.firstOrNull { it.id == id && it.inPicker }?.let { entry ->
+            return ShortcutItem(
+                id = entry.id,
+                name = context.getString(entry.labelRes),
+                owner = context.getString(R.string.shortcut_owner_system),
+                isSystem = true,
+                icon = SYSTEM_ICONS[entry.id],
+                systemIconPath = null,
+            )
+        }
+        HYPER_ISLAND_ENTRIES.firstOrNull { it.id == id }?.let { entry ->
+            return ShortcutItem(
+                id = entry.id,
+                name = context.getString(entry.labelRes),
+                owner = context.getString(R.string.shortcut_owner_hyperisland),
+                isSystem = true,
+                drawableRes = R.drawable.ic_focus_ticker_screen_recorder,
+            )
+        }
+        return null
+    }
+
     fun all(context: Context): List<ShortcutItem> {
         val systemOwner = context.getString(R.string.shortcut_owner_system)
         val system = systemEntries(context).map { entry ->

@@ -216,7 +216,24 @@ object SidebarColumnsHook : BaseHook() {
         runCatching {
             module.hook(setLm).intercept { chain ->
                 val self = chain.thisObject as? View
-                if (selfSetting.get() == true || self == null || !isDockRecycler(self)) {
+                if (selfSetting.get() == true || self == null) {
+                    return@intercept chain.proceed()
+                }
+                // 展开后的“全部应用”面板（最近应用 / 所有应用）与侧边栏本体无关：
+                // 本体固定两列，这里的列数由用户单独设置（3..6）。
+                if (isAllAppsRecycler(self)) {
+                    val columns = desiredAllAppsColumns(self)
+                    if (columns > 1) {
+                        val grid = buildGrid(self.context, columns)
+                        if (grid != null) {
+                            installSpanLookup(module, grid, columns)
+                            appliedColumns[self] = columns
+                            return@intercept chain.proceed(arrayOf<Any?>(grid))
+                        }
+                    }
+                    return@intercept chain.proceed()
+                }
+                if (!isDockRecycler(self)) {
                     return@intercept chain.proceed()
                 }
                 // 横竖屏直接决定要不要让位，进决策前必须先刷新（这里是主挂载点，
@@ -501,6 +518,26 @@ object SidebarColumnsHook : BaseHook() {
     /** 列表实际已应用的列数，宽度尚未就绪时不能把目标两列当作已生效。 */
     internal fun currentColumns(recycler: View): Int = appliedColumns[recycler] ?: 1
 
+    /** 展开后的全部应用面板 RecyclerView：祖先是 com.miui.dock.allapps.* 的 View。 */
+    private fun isAllAppsRecycler(view: View): Boolean {
+        var parent = view.parent
+        var depth = 0
+        while (parent is View && depth++ < MAX_PARENT_DEPTH) {
+            if (parent.javaClass.name.startsWith("com.miui.dock.allapps")) return true
+            parent = parent.parent
+        }
+        return false
+    }
+
+    /** 全部应用面板列数：只认用户显式设置的 3..6，其余保持原生。 */
+    private fun desiredAllAppsColumns(view: View): Int {
+        val metrics = view.resources?.displayMetrics
+        val outer = metrics != null && metrics.widthPixels > metrics.heightPixels
+        val key = if (outer) PrefKeys.ALL_APPS_PANEL_COLUMNS_OUTER else PrefKeys.ALL_APPS_PANEL_COLUMNS_INNER
+        val configured = ConfigManager.getInt(key, 0)
+        return if (configured in 3..6) configured else 1
+    }
+
     /**
      * 目标列数。两列优先，自动展开是否生效由 SidebarDefaultExpandHook 判断。
      *
@@ -512,13 +549,6 @@ object SidebarColumnsHook : BaseHook() {
     private fun desiredColumns(dock: View): Int {
         if (!landscape && allAppsPanelOpen) return 1
         if (!landscape && hasBoxPanel(dock)) return 1
-        // 外屏是横屏（宽 > 高），内屏是竖屏；分别读取用户设置的列数。
-        // 0 表示沿用原来的“两列开关”行为，1..6 为自定义。
-        val metrics = dock.resources?.displayMetrics
-        val outer = metrics != null && metrics.widthPixels > metrics.heightPixels
-        val key = if (outer) PrefKeys.SIDEBAR_COLUMNS_OUTER else PrefKeys.SIDEBAR_COLUMNS_INNER
-        val custom = ConfigManager.getInt(key, 0)
-        if (custom in 1..6) return custom
         if (!ConfigManager.getBoolean(PREF_ENABLED, false)) return 1
         return COLUMN_COUNT
     }
@@ -629,9 +659,8 @@ object SidebarColumnsHook : BaseHook() {
      */
     private fun applyPanelSize(module: XposedModule, dock: View, recycler: View?, columns: Int): Boolean {
         val context = dock.context ?: return false
-        val baseWide = targetWidth(context, COLUMN_COUNT)
-        val base = nativeWidthOf(dock, baseWide)
-        val wide = if (columns > 1) targetWidth(context, columns) else baseWide
+        val wide = targetWidth(context, COLUMN_COUNT)
+        val base = nativeWidthOf(dock, wide)
         val dockParams = dock.layoutParams
         if (base <= 0 || wide <= 0 || dockParams == null) return false
         val target = if (columns > 1) wide else base

@@ -118,6 +118,8 @@ object SidebarColumnsHook : BaseHook() {
     private val allAppsGridColumns = Collections.synchronizedMap(WeakHashMap<Any, Int>())
     /** setSpanCount 是否已 hook（只装一次）。 */
     @Volatile private var spanCountLocked = false
+    /** 诊断：应用面板 onLayout 被拦截的次数（过高说明在反复重排）。 */
+    private val allAppsLayoutCount = java.util.concurrent.atomic.AtomicInteger(0)
     private val allAppsOriginalLookups =
         Collections.synchronizedMap(WeakHashMap<View, Pair<Any, Int>>())
     /** adapter -> (数据列表, 主类型)；列表引用变化时重算。 */
@@ -547,6 +549,8 @@ object SidebarColumnsHook : BaseHook() {
                 val view = chain.thisObject as? View
                 // 类级 hook 会拦到侧边栏 dock 的列表；只处理确认过的应用面板实例。
                 if (view != null && allAppsTargets.contains(view)) {
+                    val n = allAppsLayoutCount.incrementAndGet()
+                    if (n % 30 == 0) logWarn(module, "DIAG all-apps onLayout count=$n")
                     val cols = desiredAllAppsColumns(view)
                     // Q(int) 会 requestLayout，若每帧都重设会自激；只在列数不符时纠正。
                     if (appliedColumns[view] != cols) {

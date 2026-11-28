@@ -559,7 +559,7 @@ object SidebarColumnsHook : BaseHook() {
         val parent = host.parent as? ViewGroup
         val parentWidth = parent?.width?.takeIf { it > 0 } ?: metrics.widthPixels
         val gap = (12f * density).roundToInt()
-        val cell = (100f * density).roundToInt()
+        val cell = (96f * density).roundToInt()
         val wanted = columns * cell + gap * 2
         var dockWidth = 0
         if (parent != null) {
@@ -630,13 +630,14 @@ object SidebarColumnsHook : BaseHook() {
     private fun forceFillWidth(recycler: View, host: View) {
         var current: View? = recycler
         var depth = 0
-        while (current != null && depth++ < 12) {
+        // 只处理 host 内部的中间层：host 自己必须保留算好的目标宽度，
+        // 否则面板会被撑满剩余空间（内屏表现为比外屏宽一倍）。
+        while (current != null && current !== host && depth++ < 12) {
             val lp = current.layoutParams
             if (lp != null && lp.width != ViewGroup.LayoutParams.MATCH_PARENT) {
                 lp.width = ViewGroup.LayoutParams.MATCH_PARENT
                 runCatching { current.layoutParams = lp }
             }
-            if (current === host) return
             current = current.parent as? View
         }
     }

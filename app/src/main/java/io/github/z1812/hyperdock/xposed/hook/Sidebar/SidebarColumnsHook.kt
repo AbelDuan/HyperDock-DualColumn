@@ -356,9 +356,20 @@ object SidebarColumnsHook : BaseHook() {
             module.hook(attach).intercept { chain ->
                 val result = chain.proceed()
                 val host = chain.thisObject
-                val recycler = if (getter != null && host != null) {
-                    runCatching { getter.invoke(null, host) as? View }.getOrNull()
-                } else null
+                var recycler: View? = null
+                if (getter != null && host != null) {
+                    recycler = runCatching { getter.invoke(null, host) as? View }.getOrNull()
+                        ?: runCatching { getter.invoke(host) as? View }.getOrNull()
+                }
+                if (recycler == null && host != null) {
+                    recycler = runCatching {
+                        generateSequence(host.javaClass as Class<*>?) { it.superclass }
+                            .flatMap { it.declaredFields.asSequence() }
+                            .firstOrNull { RECYCLER_VIEW_CLASS == it.type.name }
+                            ?.let { f -> f.isAccessible = true; f.get(host) as? View }
+                    }.getOrNull()
+                }
+                logWarn(module, "allapps attach hit host=${host?.javaClass?.simpleName} recycler=${recycler?.javaClass?.simpleName}")
                 if (recycler != null) applyAllAppsGrid(module, recycler, host as? View)
                 result
             }

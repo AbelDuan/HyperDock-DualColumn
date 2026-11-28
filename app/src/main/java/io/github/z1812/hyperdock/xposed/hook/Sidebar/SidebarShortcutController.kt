@@ -897,6 +897,13 @@ internal object SidebarShortcutController {
         // Remove our previous models first so deleting a quick launch entry also
         // removes its stale icon/title from the sidebar on the next refresh.
         val source = original.filterNot { isInjectedTitle(it) || isInjectedShortcut(it) }
+        val editing = isNativeEditing(source)
+        SidebarEditGuard.active = editing
+        if (editing) {
+            cachedNativeModels = source.toList()
+            lastInjectResult = emptyList()
+            return source
+        }
         fun finish(result: List<Any>): List<Any> {
             lastInjectSource = source.toList()
             lastInjectResult = result
@@ -1065,6 +1072,23 @@ internal object SidebarShortcutController {
         // Accept either a native-title list or a sufficiently large Model list so
         // the state used by SpanSizeLookup is updated before the adapter binds.
         return hasModelItem && (hasNativeTitle || value.size >= 32)
+    }
+
+    /** 宿主进入原生编辑态时原样放行，避免我们的重建列表把编辑会话取消。 */
+    private fun isNativeEditing(source: List<Any>): Boolean {
+        val editType = editStateNone?.javaClass ?: return false
+        return source.any { item ->
+            val type = item.javaClass
+            if (type.name.contains("edit", ignoreCase = true)) return@any true
+            generateSequence(type as Class<*>?) { it.superclass }
+                .flatMap { it.declaredFields.asSequence() }
+                .any { field ->
+                    field.type == editType && runCatching {
+                        field.isAccessible = true
+                        field.get(item) != editStateNone
+                    }.getOrDefault(false)
+                }
+        }
     }
 
     /** 最近应用按数据源顺序置顶，其余应用保持原生相对顺序（稳定排序）。 */

@@ -381,6 +381,8 @@ object SidebarDockSlotHook : BaseHook() {
                 val raw = chain.args.getOrNull(0) as? List<Any>
                     ?: return@intercept chain.proceed()
                 val flag = chain.args.getOrNull(1) ?: false
+                logWarn(module, "dock submit size=${raw.size} types=" +
+                    raw.filterNotNull().groupingBy { it.javaClass.simpleName }.eachCount())
                 val id = SidebarQuickSlotConfig.current()
                 // 宿主把它上次拿到的列表（就是我们注入过的那份）**原样**传回来了。
                 // 这时必须直接放行：再走一遍 strip→inject 就会造出一个内容相同、

@@ -110,6 +110,8 @@ object SidebarColumnsHook : BaseHook() {
     /** 应用面板的 SpanSizeLookup 实例 -> 该面板的 adapter（用于判断标题/分割线）。 */
     private val allAppsSpanLookups = Collections.synchronizedMap(WeakHashMap<Any, Any>())
     /** recycler -> 宿主原本的 (SpanSizeLookup, 原列数)；用它继承“标题占满整行”的规则。 */
+    /** 应用面板 SpanSizeLookup -> 它的 GridLayoutManager，用于实时读取真实 spanCount。 */
+    private val allAppsGridByLookup = Collections.synchronizedMap(WeakHashMap<Any, Any>())
     private val allAppsOriginalLookups =
         Collections.synchronizedMap(WeakHashMap<View, Pair<Any, Int>>())
     /** adapter -> (数据列表, 主类型)；列表引用变化时重算。 */
@@ -671,7 +673,10 @@ object SidebarColumnsHook : BaseHook() {
         val renamed = lm.javaClass.methods.firstOrNull {
             it.name == "Q" && it.parameterCount == 1 && it.parameterTypes[0] == Integer.TYPE
         }
-        if (renamed != null && runCatching { renamed.invoke(lm, columns) }.isSuccess) return
+        if (renamed != null && runCatching { renamed.invoke(lm, columns) }.isSuccess) {
+            invalidateSpanCache(lm)
+            return
+        }
         generateSequence(lm.javaClass as Class<*>?) { it.superclass }
             .flatMap { it.declaredFields.asSequence() }
             .firstOrNull { field ->
@@ -684,7 +689,27 @@ object SidebarColumnsHook : BaseHook() {
                         it.parameterCount == 0 && it.name.contains("requestLayout", ignoreCase = true)
                     }?.let { runCatching { it.invoke(lm) } }
                 }
+                invalidateSpanCache(lm)
             }
+    }
+
+    /**
+     * 清掉 SpanSizeLookup 的 span 索引缓存。
+     *
+     * 直接改 spanCount 会绕过 invalidate，缓存里仍按旧列数记录的索引在滚动
+     * layoutChunk 时就会越界 —— 表现为“往上滑闪退”。
+     */
+    private fun invalidateSpanCache(grid: Any) {
+        val base = spanBase ?: return
+        val getter = runCatching {
+            gridClass?.methods?.firstOrNull {
+                it.parameterCount == 0 && it.returnType == base
+            }?.apply { isAccessible = true }
+        }.getOrNull() ?: return
+        val lookup = runCatching { getter.invoke(grid) }.getOrNull() ?: return
+        base.declaredMethods.asSequence()
+            .filter { it.parameterCount == 0 && it.returnType == Void.TYPE }
+            .forEach { method -> runCatching { method.isAccessible = true; method.invoke(lookup) } }
     }
 
     /**
@@ -1017,7 +1042,12 @@ object SidebarColumnsHook : BaseHook() {
                 val position = chain.args.firstOrNull() as? Int ?: return@intercept chain.proceed()
                 val allAppsAdapter = allAppsSpanLookups[chain.thisObject]
                 if (allAppsAdapter != null) {
-                    return@intercept allAppsSpanFor(allAppsAdapter, position, columnsNow)
+                    // span 绝不能超过当前真实 spanCount，否则 GridLayoutManager
+                    // 会按 spanCount 分配的索引数组越界（ArrayIndexOutOfBounds）。
+                    val grid = allAppsGridByLookup[chain.thisObject]
+                    val live = grid?.let { readSpanCount(it) }?.takeIf { it > 0 } ?: columnsNow
+                    val span = allAppsSpanFor(allAppsAdapter, position, live)
+                    return@intercept span.coerceIn(1, live)
                 }
                 SidebarDockState.spanFor(position, columnsNow)
             }
@@ -1045,6 +1075,7 @@ object SidebarColumnsHook : BaseHook() {
         spanLookupColumns[instance] = columns
         allAppsSpanLookups[instance] = adapter
         allAppsSpanRecyclers[adapter] = recycler
+        allAppsGridByLookup[instance] = grid
         runCatching {
             spanSetter?.isAccessible = true
             spanSetter?.invoke(grid, instance)

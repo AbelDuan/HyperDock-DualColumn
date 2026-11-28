@@ -283,7 +283,7 @@ object SidebarColumnsHook : BaseHook() {
                     }
                     // 宿主自己给的就是 GridLayoutManager 时绝不替换实例 —— 换掉之后
                     // 它的点击/滚动状态会断（点快捷功能没反应）。只改列数即可。
-                    if (gridClass?.isInstance(incoming) == true) {
+                    if (incoming != null && gridClass?.isInstance(incoming) == true) {
                         appliedColumns[self] = columns
                         installAllAppsSpanLookup(module, incoming, self, columns)
                         installAllAppsLayoutHook(module, self, null, columns)

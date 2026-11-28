@@ -40,6 +40,7 @@ import io.github.z1812.hyperdock.compose.component.SectionTitle
 import io.github.z1812.hyperdock.compose.data.PrefsRepository
 import io.github.z1812.hyperdock.compose.data.rememberStringPreference
 import io.github.z1812.hyperdock.quicklaunch.QuickLaunchFormat
+import io.github.z1812.hyperdock.compose.data.ShortcutCatalog
 import io.github.z1812.hyperdock.systemtile.SystemTileSpecs
 import io.github.z1812.hyperdock.utils.IconNormalizer
 import io.github.z1812.hyperdock.xposed.hook.Sidebar.SidebarQuickSlotConfig
@@ -293,10 +294,11 @@ private fun loadOptions(
 ): List<SlotOption> {
     val pm = context.packageManager
 
-    // 内置快捷方式：目录里可选择的系统磁贴。
-    val shortcuts = SystemTileSpecs.ALL.filter { it.inPicker }.map { entry ->
-        SlotOption(entry.id, entry.zh, entry.spec, null, SlotGroup.SHORTCUT)
-    }
+    // 内置快捷方式：用与“快捷方式”页同一份 SystemUI 实探目录，
+    // 否则本机实际支持的快捷功能不会出现在常驻小窗的候选里。
+    val shortcuts = ShortcutCatalog.all(context)
+        .filter { it.isSystem }
+        .map { item -> SlotOption(item.id, item.name, item.owner, null, SlotGroup.SHORTCUT) }
 
     // 快速启动：与侧边栏注入同一套 id（`activity:<payload>|<entryId>`）。
     val entries = quickAdded.mapNotNull { raw ->

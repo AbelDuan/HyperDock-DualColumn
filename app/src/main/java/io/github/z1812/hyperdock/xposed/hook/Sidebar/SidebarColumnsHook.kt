@@ -436,7 +436,7 @@ object SidebarColumnsHook : BaseHook() {
             return
         }
         applyAllAppsPanelSize(host ?: recycler, columns)
-        installedAllAppsFitter(recycler, columns)
+        installedAllAppsFitter(recycler, host ?: recycler, columns)
         fitAllAppsItems(recycler, columns)
         appliedColumns[recycler] = columns
         forceExistingGridSpan(recycler, columns)
@@ -467,48 +467,58 @@ object SidebarColumnsHook : BaseHook() {
     }
 
     /** 只在第一次给该 RecyclerView 挂布局监听，之后每帧按列数均分 item 宽度。 */
-    private fun installedAllAppsFitter(recycler: View, columns: Int) {
+    private fun installedAllAppsFitter(recycler: View, host: View, columns: Int) {
         if (allAppsFitters.containsKey(recycler)) return
         val listener = View.OnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
-            fitAllAppsItems(v, desiredAllAppsColumns(v))
+            val cols = desiredAllAppsColumns(v)
+            applyAllAppsPanelSize(host, cols)
+            fitAllAppsItems(v, cols)
         }
         recycler.addOnLayoutChangeListener(listener)
         allAppsFitters[recycler] = listener
     }
 
-    /** 应用面板的列宽比 dock 图标更宽，否则 5/6 列会把图标挤在一起。 */
-    private fun allAppsTargetWidth(context: Context, columns: Int): Int {
-        val metrics = context.resources?.displayMetrics ?: return 0
-        val density = metrics.density.takeIf { it > 0f } ?: return 0
-        val edge = dimension(context, "dock_item_edge", FALLBACK_ITEM_EDGE_DP)
-        val padding = dimension(context, "dock_item_padding", FALLBACK_ITEM_PADDING_DP)
-        val cell = maxOf(edge * 2f, 96f)
-        return ((columns * cell + (columns + 1) * padding) * density).roundToInt()
+    /** 面板宽度按“父容器可用宽度 - 侧边栏宽度 - 边距”算，避免内屏溢出、外屏空白。 */
+    private fun allAppsTargetWidth(host: View, columns: Int): Int {
+        val context = host.context ?: return 0
+        val density = context.resources?.displayMetrics?.density?.takeIf { it > 0f } ?: return 0
+        val sidebarWidth = targetWidth(context, COLUMN_COUNT)
+        val gap = (8f * density).roundToInt()
+        val parentWidth = (host.parent as? View)?.width?.takeIf { it > 0 }
+            ?: context.resources?.displayMetrics?.widthPixels ?: 0
+        val available = parentWidth - sidebarWidth - gap * 2
+        val minWidth = (columns * 64f * density).roundToInt()
+        return maxOf(minWidth, available)
     }
 
-    /** 只改应用面板自身的宽度；不要动 TurboLayout 或它的兄弟节点，否则侧边栏会离边。 */
+    /** 只改应用面板自身宽度，不动 TurboLayout 和侧边栏兄弟节点。 */
     private fun applyAllAppsPanelSize(host: View, columns: Int) {
-        val target = allAppsTargetWidth(host.context, columns)
+        val target = allAppsTargetWidth(host, columns)
         if (target <= 0) return
         val params = host.layoutParams ?: return
-        if (params.width == target) return
-        params.width = target
-        runCatching { host.layoutParams = params }
+        if (params.width != target) {
+            params.width = target
+            runCatching { host.layoutParams = params }
+        }
     }
 
     private fun fitAllAppsItems(recycler: View, columns: Int) {
         val parent = recycler as? ViewGroup ?: return
         if (columns < 1) return
-        val usable = allAppsTargetWidth(recycler.context, columns).takeIf { it > 0 }
-            ?: (recycler.width - recycler.paddingLeft - recycler.paddingRight)
+        val density = recycler.context?.resources?.displayMetrics?.density ?: 1f
+        val inset = (4f * density).roundToInt()
+        val usable = recycler.width - recycler.paddingLeft - recycler.paddingRight - inset * 2 * columns
         if (usable <= 0) return
         val width = usable / columns
         for (index in 0 until parent.childCount) {
             val child = parent.getChildAt(index) ?: continue
             val params = child.layoutParams ?: continue
-            if (params.width == width) continue
-            params.width = width
-            runCatching { child.layoutParams = params }
+            val lp = params as? ViewGroup.MarginLayoutParams ?: continue
+            if (lp.width == width && lp.leftMargin == inset && lp.rightMargin == inset) continue
+            lp.width = width
+            lp.leftMargin = inset
+            lp.rightMargin = inset
+            runCatching { child.layoutParams = lp }
         }
     }
 

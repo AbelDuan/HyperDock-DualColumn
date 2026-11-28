@@ -119,10 +119,10 @@ object SidebarColumnsHook : BaseHook() {
     /** setSpanCount 是否已 hook（只装一次）。 */
     @Volatile private var spanCountLocked = false
     /** 定位开关：true 时完全不改造「全部应用」面板。 */
-    private val DIAGNOSTIC_DISABLE_ALL_APPS = true
+    private val DIAGNOSTIC_DISABLE_ALL_APPS = false
 
     /** 定位开关：true 时不 hook RecyclerView.onLayout。 */
-    private val DIAGNOSTIC_NO_LAYOUT_HOOK = true
+    private val DIAGNOSTIC_NO_LAYOUT_HOOK = false
 
     /** 诊断：应用面板 onLayout 被拦截的次数（过高说明在反复重排）。 */
     private val allAppsLayoutCount = java.util.concurrent.atomic.AtomicInteger(0)
@@ -274,11 +274,22 @@ object SidebarColumnsHook : BaseHook() {
                 // ——它按 dock 的 displayList 算 span，会把面板标题/图标错位。
                 if (isAllAppsRecycler(self) || isAllAppsByAdapter(self)) {
                     val columns = desiredAllAppsColumns(self)
-                    captureOriginalSpanLookup(self, chain.args.getOrNull(0))
+                    val incoming = chain.args.getOrNull(0)
+                    captureOriginalSpanLookup(self, incoming)
                     val rvParams = self.layoutParams
                     if (rvParams != null && rvParams.width != ViewGroup.LayoutParams.MATCH_PARENT) {
                         rvParams.width = ViewGroup.LayoutParams.MATCH_PARENT
                         runCatching { self.layoutParams = rvParams }
+                    }
+                    // 宿主自己给的就是 GridLayoutManager 时绝不替换实例 —— 换掉之后
+                    // 它的点击/滚动状态会断（点快捷功能没反应）。只改列数即可。
+                    if (gridClass?.isInstance(incoming) == true) {
+                        appliedColumns[self] = columns
+                        installAllAppsSpanLookup(module, incoming, self, columns)
+                        installAllAppsLayoutHook(module, self, null, columns)
+                        val result = chain.proceed()
+                        self.post { applyAllAppsSpan(module, self, columns) }
+                        return@intercept result
                     }
                     if (columns > 1) {
                         val grid = buildGrid(self.context, columns)

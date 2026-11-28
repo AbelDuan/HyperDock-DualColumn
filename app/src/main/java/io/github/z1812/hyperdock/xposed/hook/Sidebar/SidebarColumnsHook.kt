@@ -1067,8 +1067,20 @@ object SidebarColumnsHook : BaseHook() {
         }.onFailure { logWarn(module, "setSpanSizeLookup failed: ${it.message}") }
     }
 
-    /** 应用面板：标题/分割线（少数类型）占满整行，图标（多数类型）占一格。 */
+    /**
+     * 应用面板的 SpanSizeLookup。
+     *
+     * 目前停用：宿主的 GridLayoutManager 内部索引数组按它自己的 spanCount 分配，
+     * 只要我们的 lookup 返回的 span 与它不一致（宿主会中途改列数），滚动
+     * layoutChunk 时就会 ArrayIndexOutOfBounds 闪退。改用默认均分（每项占一格），
+     * 稳定之后再想标题满行的其它做法。
+     */
     private fun installAllAppsSpanLookup(module: XposedModule, grid: Any, recycler: View, columns: Int) {
+        return
+    }
+
+    @Suppress("unused")
+    private fun installAllAppsSpanLookupLegacy(module: XposedModule, grid: Any, recycler: View, columns: Int) {
         if (!ensureSpanHook(module)) return
         val adapter = runCatching { getAdapterMethod?.invoke(recycler) }.getOrNull() ?: return
         val instance = runCatching { spanDefault?.getConstructor()?.newInstance() }.getOrNull() ?: return

@@ -900,6 +900,7 @@ internal object SidebarShortcutController {
         val editing = isNativeEditing(source)
         SidebarEditGuard.active = editing
         if (editing) {
+            logWarn(module, "native edit mode detected (size=${source.size}); pass through")
             cachedNativeModels = source.toList()
             lastInjectResult = emptyList()
             return source
@@ -1075,20 +1076,33 @@ internal object SidebarShortcutController {
     }
 
     /** 宿主进入原生编辑态时原样放行，避免我们的重建列表把编辑会话取消。 */
+    /**
+     * 原生编辑态判断。
+     *
+     * 侧边栏进入编辑（添加/删除/排序）时，宿主会往列表里插入不属于「应用 / 标题 /
+     * 快捷功能 / 分割线」的临时条目。此时我们若重建列表，宿主会认为列表被外部替换，
+     * 直接退出编辑 —— 表现为点“添加”闪一下就回到普通状态。
+     *
+     * 因此用「存在无法归类的条目」作为判据：命中就完全不介入。
+     */
     private fun isNativeEditing(source: List<Any>): Boolean {
-        val editType = editStateNone?.javaClass ?: return false
+        if (source.isEmpty()) return false
         return source.any { item ->
-            val type = item.javaClass
-            if (type.name.contains("edit", ignoreCase = true)) return@any true
-            generateSequence(type as Class<*>?) { it.superclass }
-                .flatMap { it.declaredFields.asSequence() }
-                .any { field ->
-                    field.type == editType && runCatching {
-                        field.isAccessible = true
-                        field.get(item) != editStateNone
-                    }.getOrDefault(false)
-                }
+            if (item === SidebarDockState.slotItem) return@any false
+            if (isInjectedTitle(item) || isInjectedShortcut(item)) return@any false
+            if (isDividerModel(item)) return@any false
+            if (titleModelType?.isInstance(item) == true) return@any false
+            if (looksLikeQuickFunction(item)) return@any false
+            packageNameOf(item, emptySet()).isNullOrEmpty()
         }
+    }
+
+    /** 宿主的“快捷功能”模型：没有包名，但带 QuickInfo 或类名含 Shortcut/Title。 */
+    private fun looksLikeQuickFunction(item: Any): Boolean {
+        val hierarchy = generateSequence(item.javaClass as Class<*>?) { it.superclass }.toList()
+        if (hierarchy.any { it.name.contains("Shortcut") || it.name.contains("Title") }) return true
+        return hierarchy.asSequence().flatMap { it.declaredMethods.asSequence() }
+            .any { it.name == "getQuickInfo" && it.parameterCount == 0 }
     }
 
     /** 最近应用按数据源顺序置顶，其余应用保持原生相对顺序（稳定排序）。 */

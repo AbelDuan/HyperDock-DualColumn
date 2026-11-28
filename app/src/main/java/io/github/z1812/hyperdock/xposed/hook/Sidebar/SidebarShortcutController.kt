@@ -928,7 +928,18 @@ internal object SidebarShortcutController {
             }
         }
         val rankedPackages = ranked.distinct()
-        val filtered = filterCustomApps(source, rankedPackages.toHashSet())
+        // 名单/系统应用过滤只作用于“全部应用”段。原生“快捷功能”段里的系统项
+        // 不属于应用列表，关掉“显示系统应用”时也必须原样保留，否则点击添加
+        // 后条目被过滤掉，表现为闪一下又没加上。
+        val sourceDivider = source.indexOfFirst { isDividerModel(it) }
+        val appsSource = if (sourceDivider >= 0) source.take(sourceDivider) else source
+        val quickSource = if (sourceDivider >= 0) source.drop(sourceDivider + 1) else emptyList()
+        val filteredApps = filterCustomApps(appsSource, rankedPackages.toHashSet())
+        val filtered = if (sourceDivider >= 0) {
+            filteredApps + source[sourceDivider] + quickSource
+        } else {
+            filteredApps
+        }
         cachedNativeModels = source.toList()
         val quickFunctions = if (SidebarSectionConfig.enabled(CUSTOM_QUICK_ACTIONS, PrefKeys.QUICK_FUNCTIONS_ENABLED)) {
             SidebarQuickLaunchConfig.ids()

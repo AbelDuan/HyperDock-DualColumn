@@ -114,6 +114,8 @@ object SidebarColumnsHook : BaseHook() {
         Collections.synchronizedMap(WeakHashMap<View, Pair<Any, Int>>())
     /** adapter -> (数据列表, 主类型)；列表引用变化时重算。 */
     private val allAppsMajorTypes = Collections.synchronizedMap(WeakHashMap<Any, Pair<List<*>, Class<*>?>>())
+    /** adapter -> (数据列表, 类型计数)。 */
+    private val allAppsCounts = Collections.synchronizedMap(WeakHashMap<Any, Pair<List<*>, Map<String, Int>>>())
     /** adapter -> 面板 RecyclerView，用于查宿主原始 span 规则。 */
     private val allAppsSpanRecyclers = Collections.synchronizedMap(WeakHashMap<Any, View>())
     /** 应用面板 RecyclerView -> 面板容器，onLayout 时用来按需加宽面板。 */
@@ -126,6 +128,9 @@ object SidebarColumnsHook : BaseHook() {
 
     /** 全部应用面板是否处于展开态。 */
     @Volatile private var allAppsPanelOpen = false
+
+    /** 实例数不超过这个值的模型类型视为标题/分割线，占满整行。 */
+    private val TITLE_MAX_INSTANCES = 3
 
     /** 仅用于当前 dock 的工具箱避让；弱引用避免面板的 parent 反向保活窗口。 */
     private val boxPanels = Collections.synchronizedMap(WeakHashMap<View, WeakReference<View>>())
@@ -1064,20 +1069,48 @@ object SidebarColumnsHook : BaseHook() {
     /**
      * 某个位置应占几列。
      *
-     * 只认宿主自己的规则：原生布局里标题占满整行、其它各占一格，我们把“满行”
-     * 的列数换成当前列数即可。拿不到宿主规则时一律返回 1 —— 宁可标题窄一点，
-     * 也不能把「快捷功能」这类少数类型误判成标题而每项独占一行。
+     * 实测面板模型分布：Title=3（分类标题）、b=2（分割线/分组）、
+     * Shortcut=11（快捷功能）、App=168（图标）。
+     * 标题和分割线必须占满整行，否则分割线会被压成一格宽而“消失”；
+     * 快捷功能和应用各占一格。
+     *
+     * 判据：类名含 Shortcut/App 的永远单格；其余按「该类型实例数很少」
+     * 认定为标题/分割线并占满整行。
      */
     private fun allAppsSpanFor(adapter: Any, position: Int, columns: Int): Int {
-        val recycler = allAppsSpanRecyclers[adapter]
-        val source = recycler?.let { allAppsOriginalLookups[it] }
-        if (source != null) {
-            val span = runCatching {
-                spanGetter?.invoke(source.first, position) as? Int
-            }.getOrNull()
-            if (span != null && span >= source.second) return columns
+        val list = allAppsListOf(adapter) ?: return 1
+        val item = list.getOrNull(position) ?: return 1
+        val name = item.javaClass.simpleName
+        if (name.contains("Shortcut", ignoreCase = true) ||
+            name.contains("App", ignoreCase = true)
+        ) {
+            return 1
         }
-        return 1
+        val counts = allAppsTypeCounts(adapter, list) ?: return 1
+        val count = counts[name] ?: return 1
+        return if (count <= TITLE_MAX_INSTANCES) columns else 1
+    }
+
+    /** 面板 adapter 持有的数据列表。 */
+    private fun allAppsListOf(adapter: Any): List<*>? = runCatching {
+        generateSequence(adapter.javaClass as Class<*>?) { it.superclass }
+            .flatMap { it.declaredFields.asSequence() }
+            .firstOrNull { List::class.java.isAssignableFrom(it.type) }
+            ?.let { field ->
+                field.isAccessible = true
+                field.get(adapter) as? List<*>
+            }
+    }.getOrNull()
+
+    /** 各模型类型的实例数；列表引用变化时重算。 */
+    private fun allAppsTypeCounts(adapter: Any, list: List<*>): Map<String, Int>? {
+        val cached = allAppsCounts[adapter]
+        if (cached != null && cached.first === list) return cached.second
+        val counts = runCatching {
+            list.filterNotNull().groupingBy { it.javaClass.simpleName }.eachCount()
+        }.getOrNull() ?: return null
+        allAppsCounts[adapter] = list to counts
+        return counts
     }
 
     /** 诊断：打印面板列表里实际出现的模型类型和数量，用于确认标题类。 */

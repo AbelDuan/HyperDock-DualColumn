@@ -118,6 +118,9 @@ object SidebarColumnsHook : BaseHook() {
     private val allAppsGridColumns = Collections.synchronizedMap(WeakHashMap<Any, Int>())
     /** setSpanCount 是否已 hook（只装一次）。 */
     @Volatile private var spanCountLocked = false
+    /** 定位开关：true 时不 hook RecyclerView.onLayout。 */
+    private val DIAGNOSTIC_NO_LAYOUT_HOOK = true
+
     /** 诊断：应用面板 onLayout 被拦截的次数（过高说明在反复重排）。 */
     private val allAppsLayoutCount = java.util.concurrent.atomic.AtomicInteger(0)
     private val allAppsOriginalLookups =
@@ -525,6 +528,12 @@ object SidebarColumnsHook : BaseHook() {
         columns: Int,
     ) {
         if (allAppsFitters.containsKey(recycler)) return
+        // 定位开关：为 true 时不装 onLayout hook，只在 attach 后设一次尺寸。
+        if (DIAGNOSTIC_NO_LAYOUT_HOOK) {
+            logWarn(module, "DIAG onLayout hook disabled")
+            allAppsFitters[recycler] = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> }
+            return
+        }
         val onLayout = generateSequence(recycler.javaClass as Class<*>?) { it.superclass }
             .flatMap { it.declaredMethods.asSequence() }
             .firstOrNull { method ->

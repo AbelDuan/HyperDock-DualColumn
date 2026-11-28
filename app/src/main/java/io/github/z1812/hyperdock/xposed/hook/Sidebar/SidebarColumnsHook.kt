@@ -425,7 +425,7 @@ object SidebarColumnsHook : BaseHook() {
                 gridClass?.isInstance(it) == true
             } == true
         ) {
-            applyAllAppsPanelSize(host ?: recycler, columns)
+            applyAllAppsPanelSize(host ?: recycler, columns, recycler)
             fitAllAppsItems(recycler, columns)
             fitTopActions(host ?: recycler)
             return
@@ -438,7 +438,7 @@ object SidebarColumnsHook : BaseHook() {
             logWarn(module, "all-apps setLayoutManager failed")
             return
         }
-        applyAllAppsPanelSize(host ?: recycler, columns)
+        applyAllAppsPanelSize(host ?: recycler, columns, recycler)
         installedAllAppsFitter(recycler, host ?: recycler, columns)
         fitAllAppsItems(recycler, columns)
         fitTopActions(host ?: recycler)
@@ -481,7 +481,7 @@ object SidebarColumnsHook : BaseHook() {
         if (allAppsFitters.containsKey(recycler)) return
         val listener = View.OnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
             val cols = desiredAllAppsColumns(v)
-            applyAllAppsPanelSize(host, cols)
+            applyAllAppsPanelSize(host, cols, v)
             fitAllAppsItems(v, cols)
             fitTopActions(host)
         }
@@ -510,13 +510,19 @@ object SidebarColumnsHook : BaseHook() {
     }
 
     /** 只改应用面板自身宽度，不动 TurboLayout 和侧边栏兄弟节点。 */
-    private fun applyAllAppsPanelSize(host: View, columns: Int) {
+    private fun applyAllAppsPanelSize(host: View, columns: Int, recyclerForHost: View? = null) {
         val target = allAppsTargetWidth(host, columns)
         if (target <= 0) return
         val params = host.layoutParams ?: return
         if (params.width != target) {
             params.width = target
             runCatching { host.layoutParams = params }
+        }
+        // 关键：宿主 RecyclerView 有自己的固定宽度，不跟随面板；图标只铺在左半边。
+        val recyclerParams = recyclerForHost?.layoutParams
+        if (recyclerParams != null && recyclerParams.width != ViewGroup.LayoutParams.MATCH_PARENT) {
+            recyclerParams.width = ViewGroup.LayoutParams.MATCH_PARENT
+            runCatching { recyclerForHost?.layoutParams = recyclerParams }
         }
     }
 

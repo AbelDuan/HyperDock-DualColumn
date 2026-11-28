@@ -1133,6 +1133,15 @@ object SidebarColumnsHook : BaseHook() {
      * 稳定之后再想标题满行的其它做法。
      */
     private fun installAllAppsSpanLookup(module: XposedModule, grid: Any, recycler: View, columns: Int) {
+        // 满行（标题/分割线）由 SidebarShortcutController 的 span hook 负责：
+        // 它按 titleModelType/dividerModel 精确判断，且只 hook 宿主自己的
+        // SpanSizeLookup，不会出现 span 超过 spanCount 的越界。
+        // 这里再装一套会与之叠加、互相覆盖，之前的滚动闪退就是这么来的。
+        return
+    }
+
+    @Suppress("unused")
+    private fun installAllAppsSpanLookupLegacy(module: XposedModule, grid: Any, recycler: View, columns: Int) {
         if (!ensureSpanHook(module)) return
         val adapter = runCatching { getAdapterMethod?.invoke(recycler) }.getOrNull() ?: return
         val instance = runCatching { spanDefault?.getConstructor()?.newInstance() }.getOrNull() ?: return
@@ -1142,7 +1151,6 @@ object SidebarColumnsHook : BaseHook() {
         allAppsGridByLookup[instance] = grid
         allAppsGrids.add(grid)
         allAppsGridColumns[grid] = columns
-        lockSpanCount(module, grid, columns)
         runCatching {
             spanSetter?.isAccessible = true
             spanSetter?.invoke(grid, instance)

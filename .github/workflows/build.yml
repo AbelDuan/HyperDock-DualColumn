@@ -19,6 +19,15 @@ jobs:
           SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKM" --licenses >/dev/null 2>&1 || true
           "$SDKM" --sdk_root="$ANDROID_HOME" --install "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"
+      - name: Use checked-in release key
+        run: |
+          KEYSTORE="$(pwd)/tooling/keys/hyperdock-release.jks"
+          test -f "$KEYSTORE"
+          keytool -list -keystore "$KEYSTORE" -storepass hyperdock2026 -alias hyperdock >/dev/null
+          echo "KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+          echo "KEYSTORE_PASSWORD=hyperdock2026" >> "$GITHUB_ENV"
+          echo "KEY_ALIAS=hyperdock" >> "$GITHUB_ENV"
+          echo "KEY_PASSWORD=hyperdock2026" >> "$GITHUB_ENV"
       - name: Build release APK
         run: |
           chmod +x gradlew

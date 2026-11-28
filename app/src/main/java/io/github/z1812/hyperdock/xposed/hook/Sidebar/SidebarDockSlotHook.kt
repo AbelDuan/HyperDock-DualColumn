@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.content.res.Configuration
 import android.graphics.drawable.Drawable
+import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
@@ -563,13 +564,21 @@ object SidebarDockSlotHook : BaseHook() {
     /** 侧边栏列表的主类型（普通应用条目），用于识别混入的编辑态候选条目。 */
     @Volatile private var dockMainType: Class<*>? = null
 
+    /** 编辑会话放行时长：覆盖宿主“候选→提交→回填”的整套过渡帧。 */
+    private val EDIT_SESSION_MS = 6000L
+
     /**
      * 是否为侧边栏的编辑/候选状态。
      *
      * 正常列表只有应用条目；一旦混入其它类型（快捷功能候选、占位项），
      * 说明宿主正在编辑，必须原样放行，否则添加操作会被我们的重排抹掉。
      */
+    /** 编辑会话截止时间：宿主整个编辑流程（含中间的过渡帧）都原样放行。 */
+    @Volatile private var editSessionUntil = 0L
+
     private fun isDockEditState(list: List<Any>): Boolean {
+        val now = SystemClock.uptimeMillis()
+        if (now < editSessionUntil) return true
         // 排除我们自己注入的槽位条目，只看宿主提交的模型。
         val models = list.filterNotNull().filter { it !== slotItem }
         if (models.isEmpty()) return false
@@ -579,7 +588,9 @@ object SidebarDockSlotHook : BaseHook() {
             dockMainType = types.first()
             return false
         }
-        // 混入多种类型：宿主把快捷功能候选/占位条目一起提交，属于编辑态。
+        // 混入多种类型：宿主进入编辑/候选态。之后会有 size=5、size=13 之类的
+        // 过渡帧，也一并放行，否则注入会把列表按回去，编辑当场被取消。
+        editSessionUntil = now + EDIT_SESSION_MS
         return true
     }
 

@@ -17,6 +17,9 @@ class HyperDockModule : XposedModule() {
 
     private var configManagerInitialized = false
 
+    /** 定位开关：true 时侧边栏相关 Hook 全部不安装。 */
+    private val DIAGNOSTIC_NO_HOOKS = true
+
     override fun onPackageLoaded(param: PackageLoadedParam) {
         initializeConfigManager()
         log("onPackageLoaded: pkg=${param.packageName}")
@@ -31,6 +34,12 @@ class HyperDockModule : XposedModule() {
 
         when (param.packageName) {
             "com.miui.securitycenter" -> {
+                // 定位开关：true 时不安装任何 Hook，用于判断“快捷功能点不动”
+                // 是否由本模块造成。
+                if (DIAGNOSTIC_NO_HOOKS) {
+                    log("DIAG all hooks disabled for diagnosis")
+                    return
+                }
                 SidebarDefaultExpandHook.init(this, param)
                 SidebarShortcutHook.init(this, param)
                 SidebarCloseHook.init(this, param)

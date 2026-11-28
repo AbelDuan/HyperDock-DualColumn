@@ -254,4 +254,8 @@
     <string name="sidebar_columns_outer">外屏列数</string>
     <string name="sidebar_columns_auto">自动（跟随两列开关）</string>
     <string name="sidebar_columns_summary">0 为自动，1–6 为自定义；全部应用面板展开时内屏仍会回到单列</string>
+    <string name="all_apps_columns_inner">内屏全部应用列数</string>
+    <string name="all_apps_columns_outer">外屏全部应用列数</string>
+    <string name="all_apps_columns_auto">自动（保持系统默认）</string>
+    <string name="all_apps_columns_summary">展开侧边栏后的应用列表列数，可设 3–6；侧边栏本体仍是两列</string>
 </resources>

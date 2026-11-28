@@ -27,9 +27,9 @@ object PrefKeys {
     const val SIDEBAR_STAGGERED_EXPAND = "sidebar_staggered_expand"
     /** 侧边栏两列。开启时由 Hook 暂停 [SIDEBAR_EXPAND_ALL_APPS]，保留其配置值。 */
     const val SIDEBAR_TWO_COLUMNS = "sidebar_two_columns"
-    /** 内屏/外屏侧边栏列数；0=跟随“两列”开关，1..6=自定义。 */
-    const val SIDEBAR_COLUMNS_INNER = "sidebar_columns_inner"
-    const val SIDEBAR_COLUMNS_OUTER = "sidebar_columns_outer"
+    /** 展开后的“全部应用”面板列数；0=跟随系统，3..6=自定义。 */
+    const val ALL_APPS_PANEL_COLUMNS_INNER = "all_apps_panel_columns_inner"
+    const val ALL_APPS_PANEL_COLUMNS_OUTER = "all_apps_panel_columns_outer"
     /**
      * 两列模式下「速记」旁边那一格放什么。值为条目 id：
      * `app:<包名>` / 快速启动 id（`activity:...`） / 内置快捷方式 id（目录 id 或 `pkg/cls`）。
@@ -108,8 +108,8 @@ object PrefKeys {
         SIDEBAR_PANEL_CACHE,
         SIDEBAR_STAGGERED_EXPAND,
         SIDEBAR_TWO_COLUMNS,
-        SIDEBAR_COLUMNS_INNER,
-        SIDEBAR_COLUMNS_OUTER,
+        ALL_APPS_PANEL_COLUMNS_INNER,
+        ALL_APPS_PANEL_COLUMNS_OUTER,
         SIDEBAR_QUICK_SLOT,
         SIDEBAR_AUTO_CLOSE_MODE,
         ALL_APPS_RECENT_OPEN_ENABLED,
@@ -133,8 +133,8 @@ object PrefKeys {
         SIDEBAR_PANEL_CACHE,
         SIDEBAR_STAGGERED_EXPAND,
         SIDEBAR_TWO_COLUMNS,
-        SIDEBAR_COLUMNS_INNER,
-        SIDEBAR_COLUMNS_OUTER,
+        ALL_APPS_PANEL_COLUMNS_INNER,
+        ALL_APPS_PANEL_COLUMNS_OUTER,
         SIDEBAR_QUICK_SLOT,
         SIDEBAR_AUTO_CLOSE_MODE,
         ALL_APPS_CUSTOM_ENABLED,

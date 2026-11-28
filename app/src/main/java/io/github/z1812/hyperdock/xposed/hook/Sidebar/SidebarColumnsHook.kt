@@ -105,6 +105,8 @@ object SidebarColumnsHook : BaseHook() {
     private val appliedDocks = Collections.newSetFromMap(WeakHashMap<View, Boolean>())
     /** 全部应用面板的布局监听器，弱引用避免持有已销毁的 RecyclerView。 */
     private val allAppsFitters = Collections.synchronizedMap(WeakHashMap<View, View.OnLayoutChangeListener>())
+    /** 确认属于「全部应用面板」的 RecyclerView；onLayout 是类级 hook，必须按实例过滤。 */
+    private val allAppsTargets = Collections.newSetFromMap(WeakHashMap<View, Boolean>())
     /** 全部应用面板容器被我们改过的宽度，用来识别“旧目标宽度”的兄弟背景。 */
     private val allAppsWidths = Collections.synchronizedMap(WeakHashMap<View, Int>())
 
@@ -234,14 +236,20 @@ object SidebarColumnsHook : BaseHook() {
                     return@intercept chain.proceed()
                 }
                 // 展开后的“全部应用”面板（最近应用 / 所有应用）与侧边栏本体无关：
-                // 本体固定两列，这里的列数由用户单独设置（3..6）。
+                // 本体固定两列，面板固定 4 列。这里不能装 dock 用的 SpanSizeLookup
+                // ——它按 dock 的 displayList 算 span，会把面板标题/图标错位。
                 if (isAllAppsRecycler(self) || isAllAppsByAdapter(self)) {
                     val columns = desiredAllAppsColumns(self)
+                    val rvParams = self.layoutParams
+                    if (rvParams != null && rvParams.width != ViewGroup.LayoutParams.MATCH_PARENT) {
+                        rvParams.width = ViewGroup.LayoutParams.MATCH_PARENT
+                        runCatching { self.layoutParams = rvParams }
+                    }
                     if (columns > 1) {
                         val grid = buildGrid(self.context, columns)
                         if (grid != null) {
-                            installSpanLookup(module, grid, columns)
                             appliedColumns[self] = columns
+                            installAllAppsLayoutHook(module, self, null, columns)
                             return@intercept chain.proceed(arrayOf<Any?>(grid))
                         }
                     }
@@ -422,46 +430,143 @@ object SidebarColumnsHook : BaseHook() {
         return null
     }
 
-    /** 给全部应用面板设置用户选择的列数，并让 item 宽度按列数均分。 */
+    /**
+     * 全部应用面板：列数固定 4，背景宽度完全沿用宿主给的值（不修改），
+     * 只把每个 item 在背景宽度内均匀分配，保证内外屏一致且不越界。
+     */
     private fun applyAllAppsGrid(module: XposedModule, recycler: View, host: View? = null) {
+        allAppsTargets.add(recycler)
         val columns = desiredAllAppsColumns(recycler)
-        val setLm = setLayoutManagerMethod ?: return
-        if (columns <= 1) {
-            appliedColumns.remove(recycler)
+        // RecyclerView 必须铺满宿主容器，否则图标只排在左半边。
+        val rvParams = recycler.layoutParams
+        if (rvParams != null && rvParams.width != ViewGroup.LayoutParams.MATCH_PARENT) {
+            rvParams.width = ViewGroup.LayoutParams.MATCH_PARENT
+            runCatching { recycler.layoutParams = rvParams }
+        }
+        applyAllAppsSpan(module, recycler, columns)
+        installAllAppsLayoutHook(module, recycler, host, columns)
+        repositionAllAppsItems(recycler, columns)
+        logWarn(module, "all-apps apply columns=$columns host=${host?.width} " +
+            "recycler=${recycler.width} children=${(recycler as? ViewGroup)?.childCount}")
+    }
+
+    /** 设置 span 列数；宿主可能写回默认值，因此每次调用都强制落一次。 */
+    private fun applyAllAppsSpan(module: XposedModule, recycler: View, columns: Int) {
+        val setLm = setLayoutManagerMethod
+        val current = runCatching { getLayoutManagerMethod?.invoke(recycler) }.getOrNull()
+        if (gridClass?.isInstance(current) == true) {
+            forceExistingGridSpan(recycler, columns)
+            appliedColumns[recycler] = columns
             return
         }
-        logWarn(module, "all-apps apply columns=$columns lm=" +
-            (getLayoutManagerMethod?.invoke(recycler)?.javaClass?.simpleName ?: "null"))
         val grid = buildGrid(recycler.context, columns) ?: run {
             logWarn(module, "all-apps buildGrid failed")
             return
         }
         selfSetting.set(true)
-        val ok = runCatching { setLm.invoke(recycler, grid) }.isSuccess
+        val ok = runCatching { setLm?.invoke(recycler, grid) }.isSuccess
         selfSetting.remove()
-        if (!ok) {
+        if (ok) {
+            appliedColumns[recycler] = columns
+            forceExistingGridSpan(recycler, columns)
+        } else {
             logWarn(module, "all-apps setLayoutManager failed")
+        }
+    }
+
+    /**
+     * 在 RecyclerView.onLayout 之后重新分配 item 宽度。
+     *
+     * 不能只靠 OnLayoutChangeListener：它只在 RecyclerView 自身尺寸变化时触发，
+     * 滚动复用 item 时不会回调，新绑定的 item 会退回宿主默认宽度。
+     */
+    private fun installAllAppsLayoutHook(
+        module: XposedModule,
+        recycler: View,
+        host: View?,
+        columns: Int,
+    ) {
+        if (allAppsFitters.containsKey(recycler)) return
+        val onLayout = generateSequence(recycler.javaClass as Class<*>?) { it.superclass }
+            .flatMap { it.declaredMethods.asSequence() }
+            .firstOrNull { method ->
+                method.name == "onLayout" && method.parameterCount == 5 &&
+                    method.parameterTypes[0] == Boolean::class.javaPrimitiveType
+            }
+        if (onLayout == null) {
+            logWarn(module, "all-apps onLayout hook unavailable; falling back to layout listener")
+            val listener = View.OnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+                repositionAllAppsItems(v, desiredAllAppsColumns(v))
+            }
+            recycler.addOnLayoutChangeListener(listener)
+            allAppsFitters[recycler] = listener
             return
         }
-        applyAllAppsPanelSize(host ?: recycler, columns, recycler)
-        installedAllAppsFitter(recycler, host ?: recycler, columns)
-        fitAllAppsItems(recycler, columns)
-        fitTopActions(host ?: recycler)
-        appliedColumns[recycler] = columns
-        forceExistingGridSpan(recycler, columns)
-        val hostView = host ?: recycler
-        val parentView = hostView.parent as? View
-        val first = (recycler as? ViewGroup)?.getChildAt(0)
-        logWarn(module, "all-apps sizes host=${hostView.width} parent=${parentView?.width} " +
-            "recycler=${recycler.width} padding=${recycler.paddingLeft}/${recycler.paddingRight} " +
-            "child=${first?.width} columns=$columns density=${hostView.context?.resources?.displayMetrics?.density}")
-        log(module, "all-apps panel columns=$columns on ${recycler.javaClass.simpleName}")
+        onLayout.isAccessible = true
+        // 占位 listener，仅用于标记该 RecyclerView 已装过 hook。
+        allAppsFitters[recycler] = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> }
+        runCatching {
+            module.hook(onLayout).intercept { chain ->
+                val result = chain.proceed()
+                val view = chain.thisObject as? View
+                // 类级 hook 会拦到侧边栏 dock 的列表；只处理确认过的应用面板实例。
+                if (view != null && allAppsTargets.contains(view)) {
+                    val cols = desiredAllAppsColumns(view)
+                    // Q(int) 会 requestLayout，若每帧都重设会自激；只在列数不符时纠正。
+                    if (appliedColumns[view] != cols) {
+                        applyAllAppsSpan(module, view, cols)
+                    }
+                    repositionAllAppsItems(view, cols)
+                }
+                result
+            }
+            logWarn(module, "all-apps onLayout hook installed")
+        }.onFailure { logWarn(module, "all-apps onLayout hook failed: ${it.message}") }
+        if (host != null) {
+            // 首帧宿主尺寸就绪后补一次。
+            host.post { repositionAllAppsItems(recycler, desiredAllAppsColumns(recycler)) }
+        }
+    }
+
+    /** 读 GridLayoutManager 当前的 spanCount（R8 把字段名混淆成 f4975b）。 */
+    private fun readSpanCount(lm: Any): Int =
+        generateSequence(lm.javaClass as Class<*>?) { it.superclass }
+            .flatMap { it.declaredFields.asSequence() }
+            .firstOrNull { it.type == Integer.TYPE && it.name.contains("f4975b") }
+            ?.let { field ->
+                runCatching {
+                    field.isAccessible = true
+                    field.get(lm) as? Int
+                }.getOrNull()
+            } ?: -1
+
+    /** 把每个 item 在 RecyclerView 可用宽度内平均分成 columns 份，四边留同一间距。 */
+    private fun repositionAllAppsItems(recycler: View, columns: Int) {
+        val container = recycler as? ViewGroup ?: return
+        if (columns < 1) return
+        val usable = recycler.width - recycler.paddingLeft - recycler.paddingRight
+        if (usable <= 0) return
+        val density = recycler.context?.resources?.displayMetrics?.density ?: 1f
+        val margin = (6f * density).roundToInt()
+        val slot = usable / columns
+        val width = slot - margin * 2
+        if (width <= 0) return
+        for (index in 0 until container.childCount) {
+            val child = container.getChildAt(index) ?: continue
+            val lp = child.layoutParams as? ViewGroup.MarginLayoutParams ?: continue
+            if (lp.width == width && lp.leftMargin == margin && lp.rightMargin == margin) continue
+            lp.width = width
+            lp.leftMargin = margin
+            lp.rightMargin = margin
+            runCatching { child.layoutParams = lp }
+        }
     }
 
     /** 宿主可能在 setLayoutManager 之后再把 span 写回默认值，这里直接改现有实例。 */
     private fun forceExistingGridSpan(recycler: View, columns: Int) {
         val lm = runCatching { getLayoutManagerMethod?.invoke(recycler) }.getOrNull() ?: return
         if (gridClass?.isInstance(lm) != true) return
+        if (readSpanCount(lm) == columns) return
         val renamed = lm.javaClass.methods.firstOrNull {
             it.name == "Q" && it.parameterCount == 1 && it.parameterTypes[0] == Integer.TYPE
         }
@@ -479,99 +584,6 @@ object SidebarColumnsHook : BaseHook() {
                     }?.let { runCatching { it.invoke(lm) } }
                 }
             }
-    }
-
-    /** 只在第一次给该 RecyclerView 挂布局监听，之后每帧按列数均分 item 宽度。 */
-    private fun installedAllAppsFitter(recycler: View, host: View, columns: Int) {
-        if (allAppsFitters.containsKey(recycler)) return
-        val listener = View.OnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
-            val cols = desiredAllAppsColumns(v)
-            applyAllAppsPanelSize(host, cols, v)
-            fitAllAppsItems(v, cols)
-            fitTopActions(host)
-        }
-        recycler.addOnLayoutChangeListener(listener)
-        allAppsFitters[recycler] = listener
-    }
-
-    /** 以背景容器实际宽度为准，扣掉同一容器里的侧边栏 dock 宽度，再均分 4 列。 */
-    private fun allAppsTargetWidth(host: View, columns: Int): Int {
-        val context = host.context ?: return 0
-        val density = context.resources?.displayMetrics?.density?.takeIf { it > 0f } ?: return 0
-        val parent = host.parent as? ViewGroup ?: return 0
-        val gap = (10f * density).roundToInt()
-        var dockWidth = 0
-        for (index in 0 until parent.childCount) {
-            val child = parent.getChildAt(index) ?: continue
-            if (child === host) continue
-            if (dockClass?.isInstance(child) == true) {
-                dockWidth = maxOf(dockWidth, child.width)
-            }
-        }
-        if (dockWidth <= 0) dockWidth = targetWidth(context, COLUMN_COUNT)
-        val available = parent.width - dockWidth - gap * 2
-        val maxWanted = (columns * 96f * density + gap * 2).roundToInt()
-        return maxOf((columns * 64f * density).roundToInt(), minOf(available, maxWanted))
-    }
-
-    /** 只改应用面板自身宽度，不动 TurboLayout 和侧边栏兄弟节点。 */
-    private fun applyAllAppsPanelSize(host: View, columns: Int, recyclerForHost: View? = null) {
-        val target = allAppsTargetWidth(host, columns)
-        if (target <= 0) return
-        val params = host.layoutParams ?: return
-        if (params.width != target) {
-            params.width = target
-            runCatching { host.layoutParams = params }
-        }
-        // 关键：宿主 RecyclerView 有自己的固定宽度，不跟随面板；图标只铺在左半边。
-        val recyclerParams = recyclerForHost?.layoutParams
-        if (recyclerParams != null && recyclerParams.width != ViewGroup.LayoutParams.MATCH_PARENT) {
-            recyclerParams.width = ViewGroup.LayoutParams.MATCH_PARENT
-            runCatching { recyclerForHost?.layoutParams = recyclerParams }
-        }
-    }
-
-    /** 搜索框和编辑按钮限制在面板宽度内，避免超出界面边缘。 */
-    private fun fitTopActions(host: View) {
-        val group = host as? ViewGroup ?: return
-        val density = host.context?.resources?.displayMetrics?.density ?: 1f
-        val button = (24f * density).roundToInt()
-        for (index in 0 until group.childCount) {
-            val child = group.getChildAt(index) ?: continue
-            val lp = child.layoutParams ?: continue
-            val name = child.javaClass.name
-            if (name.contains("ImageButton") || name.contains("ImageView")) {
-                if (lp.width > button) {
-                    lp.width = button
-                    runCatching { child.layoutParams = lp }
-                }
-            } else if (name.contains("EditText") || name.contains("TextView")) {
-                val max = host.width - button * 3
-                if (max > 0 && lp.width > max) {
-                    lp.width = max
-                    runCatching { child.layoutParams = lp }
-                }
-            }
-        }
-    }
-
-    private fun fitAllAppsItems(recycler: View, columns: Int) {
-        val parent = recycler as? ViewGroup ?: return
-        if (columns < 1) return
-        val density = recycler.context?.resources?.displayMetrics?.density ?: 1f
-        val margin = (8f * density).roundToInt()
-        val span = (recycler.width - recycler.paddingLeft - recycler.paddingRight) / columns
-        if (span <= margin * 2) return
-        val width = span - margin * 2
-        for (index in 0 until parent.childCount) {
-            val child = parent.getChildAt(index) ?: continue
-            val lp = child.layoutParams as? ViewGroup.MarginLayoutParams ?: continue
-            if (lp.width == width && lp.leftMargin == margin && lp.rightMargin == margin) continue
-            lp.width = width
-            lp.leftMargin = margin
-            lp.rightMargin = margin
-            runCatching { child.layoutParams = lp }
-        }
     }
 
     /**

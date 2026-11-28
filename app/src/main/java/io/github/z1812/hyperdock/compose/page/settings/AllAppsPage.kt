@@ -80,6 +80,12 @@ internal fun AllAppsPage(
     val enabled = rememberBooleanPreference(prefs, PrefKeys.ALL_APPS_CUSTOM_ENABLED, false)
     val mode = rememberStringPreference(prefs, PrefKeys.ALL_APPS_CUSTOM_MODE, MODE_BLACKLIST)
     val showSystem = rememberBooleanPreference(prefs, PrefKeys.ALL_APPS_SHOW_SYSTEM, true)
+    val innerColumns = remember { mutableStateOf(prefs.getInt(PrefKeys.ALL_APPS_PANEL_COLUMNS_INNER, 0)) }
+    val outerColumns = remember { mutableStateOf(prefs.getInt(PrefKeys.ALL_APPS_PANEL_COLUMNS_OUTER, 0)) }
+    val columnLabels = listOf(
+        stringResource(R.string.all_apps_columns_auto),
+        "3", "4", "5", "6",
+    )
     val recentOpen = rememberBooleanPreference(prefs, PrefKeys.ALL_APPS_RECENT_OPEN_ENABLED, false)
     val recentTask = rememberBooleanPreference(prefs, PrefKeys.ALL_APPS_RECENT_TASK_ENABLED, false)
     val recentOrder = rememberStringPreference(
@@ -189,6 +195,35 @@ internal fun AllAppsPage(
                             stringResource(R.string.sidebar_section_move_down),
                         ) { moveSource(id, 1) }
                     }
+                }
+            }
+        }
+        item {
+            SectionTitle(stringResource(R.string.all_apps_columns_title))
+            Card(modifier = Modifier.fillMaxWidth()) {
+                PreferenceDropdown(
+                    title = stringResource(R.string.all_apps_columns_inner),
+                    summary = stringResource(R.string.all_apps_columns_summary),
+                    icon = null,
+                    items = columnLabels,
+                    selectedIndex = innerColumns.value.coerceIn(3, 6) - 3,
+                    enabled = true,
+                ) { index ->
+                    val columns = index + 3
+                    innerColumns.value = columns
+                    prefs.putInt(PrefKeys.ALL_APPS_PANEL_COLUMNS_INNER, columns)
+                }
+                PreferenceDropdown(
+                    title = stringResource(R.string.all_apps_columns_outer),
+                    summary = stringResource(R.string.all_apps_columns_summary),
+                    icon = null,
+                    items = columnLabels,
+                    selectedIndex = outerColumns.value.coerceIn(3, 6) - 3,
+                    enabled = true,
+                ) { index ->
+                    val columns = index + 3
+                    outerColumns.value = columns
+                    prefs.putInt(PrefKeys.ALL_APPS_PANEL_COLUMNS_OUTER, columns)
                 }
             }
         }

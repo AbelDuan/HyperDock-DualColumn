@@ -173,12 +173,16 @@ internal fun ShortcutPage(
 
     fun effectiveName(item: ShortcutItem): String = customLabel(item.id) ?: item.name
 
-    // 已添加的显示顺序：order 里记录的在前，未记录的新增项按 catalog 顺序追加。
-    val orderedAdded = remember(added.value, order.value, catalog) {
+    // 已添加的显示顺序：order 里记录的在前，未记录的新增项按目录顺序追加。
+    // 目录缓存可能变化，已添加的 id 即使不在当前目录里也要兜底解析出来，
+    // 否则点击“添加”会闪一下又消失。
+    val orderedAdded = remember(added.value, order.value, catalog, context) {
         val recorded = order.value.split(',').filter { it.isNotBlank() }
         val byId = catalog.associateBy { it.id }
-        val known = recorded.mapNotNull { byId[it] }.filter { it.id in added.value }
-        val rest = catalog.filter { it.id in added.value && it.id !in recorded }
+        val resolved = added.value.mapNotNull { id -> byId[id] ?: ShortcutCatalog.resolveAdded(context, id) }
+        val byResolved = resolved.associateBy { it.id }
+        val known = recorded.mapNotNull { byResolved[it] }
+        val rest = resolved.filter { it.id !in recorded }
         known + rest
     }
 

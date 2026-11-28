@@ -430,16 +430,12 @@ object SidebarColumnsHook : BaseHook() {
             appliedColumns.remove(recycler)
             return
         }
-        if (appliedColumns[recycler] == columns && getLayoutManagerMethod?.invoke(recycler)?.let {
-                gridClass?.isInstance(it) == true
-            } == true
-        ) {
-            applyAllAppsPanelSize(host ?: recycler, columns, recycler)
-            fitAllAppsItems(recycler, columns)
-            fitTopActions(host ?: recycler)
+        logWarn(module, "all-apps apply columns=$columns lm=" +
+            (getLayoutManagerMethod?.invoke(recycler)?.javaClass?.simpleName ?: "null"))
+        val grid = buildGrid(recycler.context, columns) ?: run {
+            logWarn(module, "all-apps buildGrid failed")
             return
         }
-        val grid = buildGrid(recycler.context, columns) ?: return
         selfSetting.set(true)
         val ok = runCatching { setLm.invoke(recycler, grid) }.isSuccess
         selfSetting.remove()

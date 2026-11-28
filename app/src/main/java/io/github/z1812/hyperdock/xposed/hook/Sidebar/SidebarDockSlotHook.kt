@@ -381,6 +381,14 @@ object SidebarDockSlotHook : BaseHook() {
                 val raw = chain.args.getOrNull(0) as? List<Any>
                     ?: return@intercept chain.proceed()
                 val flag = chain.args.getOrNull(1) ?: false
+                // 侧边栏编辑/候选态：宿主会把快捷功能候选（类型不同于应用条目）
+                // 一并提交上来。此时我们再剥离子/注入槽位，就会把候选列表按回普通
+                // 列表 —— 表现为点“添加”没反应、快捷功能也打不开。
+                if (isDockEditState(raw)) {
+                    SidebarDockState.displayList = raw
+                    logWarn(module, "dock edit state size=${raw.size}; pass through")
+                    return@intercept chain.proceed()
+                }
                 val prev = lastSubmittedRaw
                 lastSubmittedRaw = raw
                 val added = if (prev.isEmpty()) emptyList() else raw.filter { item ->
@@ -552,6 +560,29 @@ object SidebarDockSlotHook : BaseHook() {
     }
 
     /** 把上次注入的条目从宿主传回来的列表里剔除，保证每次最多只有一个槽位。 */
+    /** 侧边栏列表的主类型（普通应用条目），用于识别混入的编辑态候选条目。 */
+    @Volatile private var dockMainType: Class<*>? = null
+
+    /**
+     * 是否为侧边栏的编辑/候选状态。
+     *
+     * 正常列表只有应用条目；一旦混入其它类型（快捷功能候选、占位项），
+     * 说明宿主正在编辑，必须原样放行，否则添加操作会被我们的重排抹掉。
+     */
+    private fun isDockEditState(list: List<Any>): Boolean {
+        // 排除我们自己注入的槽位条目，只看宿主提交的模型。
+        val models = list.filterNotNull().filter { it !== slotItem }
+        if (models.isEmpty()) return false
+        val types = models.map { it.javaClass }.distinct()
+        if (types.size == 1) {
+            // 单一类型 = 普通应用列表（正常态）。
+            dockMainType = types.first()
+            return false
+        }
+        // 混入多种类型：宿主把快捷功能候选/占位条目一起提交，属于编辑态。
+        return true
+    }
+
     private fun strip(list: List<Any>): List<Any> {
         val existing = slotItem ?: return list
         if (list.none { it === existing }) return list

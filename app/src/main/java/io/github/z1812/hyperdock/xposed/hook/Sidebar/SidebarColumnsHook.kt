@@ -512,6 +512,13 @@ object SidebarColumnsHook : BaseHook() {
     private fun desiredColumns(dock: View): Int {
         if (!landscape && allAppsPanelOpen) return 1
         if (!landscape && hasBoxPanel(dock)) return 1
+        // 外屏是横屏（宽 > 高），内屏是竖屏；分别读取用户设置的列数。
+        // 0 表示沿用原来的“两列开关”行为，1..6 为自定义。
+        val metrics = dock.resources?.displayMetrics
+        val outer = metrics != null && metrics.widthPixels > metrics.heightPixels
+        val key = if (outer) PrefKeys.SIDEBAR_COLUMNS_OUTER else PrefKeys.SIDEBAR_COLUMNS_INNER
+        val custom = ConfigManager.getInt(key, 0)
+        if (custom in 1..6) return custom
         if (!ConfigManager.getBoolean(PREF_ENABLED, false)) return 1
         return COLUMN_COUNT
     }
@@ -622,8 +629,9 @@ object SidebarColumnsHook : BaseHook() {
      */
     private fun applyPanelSize(module: XposedModule, dock: View, recycler: View?, columns: Int): Boolean {
         val context = dock.context ?: return false
-        val wide = targetWidth(context, COLUMN_COUNT)
-        val base = nativeWidthOf(dock, wide)
+        val baseWide = targetWidth(context, COLUMN_COUNT)
+        val base = nativeWidthOf(dock, baseWide)
+        val wide = if (columns > 1) targetWidth(context, columns) else baseWide
         val dockParams = dock.layoutParams
         if (base <= 0 || wide <= 0 || dockParams == null) return false
         val target = if (columns > 1) wide else base

@@ -73,6 +73,7 @@ object SidebarColumnsHook : BaseHook() {
     private const val MAX_PARENT_DEPTH = 16
 
     @Volatile private var recyclerViewClass: Class<*>? = null
+    @Volatile private var dockClass: Class<*>? = null
     @Volatile private var getAdapterMethod: Method? = null
     @Volatile private var turboClass: Class<*>? = null
     @Volatile private var gridClass: Class<*>? = null
@@ -161,6 +162,7 @@ object SidebarColumnsHook : BaseHook() {
         hookBoxPanel(module, turbo)
         hookRotation(module, turbo)
         findDockLayoutClass(turbo)?.let { dock ->
+            dockClass = dock
             log(module, "dock=${dock.name}")
             hookDockConstructors(module, dock)
             hookBottomIconSelected(module, dock)
@@ -425,6 +427,7 @@ object SidebarColumnsHook : BaseHook() {
         ) {
             applyAllAppsPanelSize(host ?: recycler, columns)
             fitAllAppsItems(recycler, columns)
+            fitTopActions(host ?: recycler)
             return
         }
         val grid = buildGrid(recycler.context, columns) ?: return
@@ -438,6 +441,7 @@ object SidebarColumnsHook : BaseHook() {
         applyAllAppsPanelSize(host ?: recycler, columns)
         installedAllAppsFitter(recycler, host ?: recycler, columns)
         fitAllAppsItems(recycler, columns)
+        fitTopActions(host ?: recycler)
         appliedColumns[recycler] = columns
         forceExistingGridSpan(recycler, columns)
         log(module, "all-apps panel columns=$columns on ${recycler.javaClass.simpleName}")
@@ -473,26 +477,30 @@ object SidebarColumnsHook : BaseHook() {
             val cols = desiredAllAppsColumns(v)
             applyAllAppsPanelSize(host, cols)
             fitAllAppsItems(v, cols)
+            fitTopActions(host)
         }
         recycler.addOnLayoutChangeListener(listener)
         allAppsFitters[recycler] = listener
     }
 
-    /**
-     * 面板宽度 = 4 个图标单元 + 两侧留白，内外屏物理尺寸一致；
-     * 同时不超过“父容器宽度 - 侧边栏宽度”，避免外屏被侧边栏压掉一列。
-     */
+    /** 以背景容器实际宽度为准，扣掉同一容器里的侧边栏 dock 宽度，再均分 4 列。 */
     private fun allAppsTargetWidth(host: View, columns: Int): Int {
         val context = host.context ?: return 0
         val density = context.resources?.displayMetrics?.density?.takeIf { it > 0f } ?: return 0
-        val cellPx = (96f * density).roundToInt()
-        val padPx = (10f * density).roundToInt()
-        val wanted = columns * cellPx + padPx * 2
-        val sidebarWidth = targetWidth(context, COLUMN_COUNT)
-        val parentWidth = (host.parent as? View)?.width?.takeIf { it > 0 }
-            ?: context.resources?.displayMetrics?.widthPixels ?: 0
-        val available = parentWidth - sidebarWidth - padPx * 2
-        return if (available > 0) minOf(wanted, available) else wanted
+        val parent = host.parent as? ViewGroup ?: return 0
+        val gap = (10f * density).roundToInt()
+        var dockWidth = 0
+        for (index in 0 until parent.childCount) {
+            val child = parent.getChildAt(index) ?: continue
+            if (child === host) continue
+            if (dockClass?.isInstance(child) == true) {
+                dockWidth = maxOf(dockWidth, child.width)
+            }
+        }
+        if (dockWidth <= 0) dockWidth = targetWidth(context, COLUMN_COUNT)
+        val available = parent.width - dockWidth - gap * 2
+        val maxWanted = (columns * 96f * density + gap * 2).roundToInt()
+        return maxOf((columns * 64f * density).roundToInt(), minOf(available, maxWanted))
     }
 
     /** 只改应用面板自身宽度，不动 TurboLayout 和侧边栏兄弟节点。 */
@@ -503,6 +511,30 @@ object SidebarColumnsHook : BaseHook() {
         if (params.width != target) {
             params.width = target
             runCatching { host.layoutParams = params }
+        }
+    }
+
+    /** 搜索框和编辑按钮限制在面板宽度内，避免超出界面边缘。 */
+    private fun fitTopActions(host: View) {
+        val group = host as? ViewGroup ?: return
+        val density = host.context?.resources?.displayMetrics?.density ?: 1f
+        val button = (24f * density).roundToInt()
+        for (index in 0 until group.childCount) {
+            val child = group.getChildAt(index) ?: continue
+            val lp = child.layoutParams ?: continue
+            val name = child.javaClass.name
+            if (name.contains("ImageButton") || name.contains("ImageView")) {
+                if (lp.width > button) {
+                    lp.width = button
+                    runCatching { child.layoutParams = lp }
+                }
+            } else if (name.contains("EditText") || name.contains("TextView")) {
+                val max = host.width - button * 3
+                if (max > 0 && lp.width > max) {
+                    lp.width = max
+                    runCatching { child.layoutParams = lp }
+                }
+            }
         }
     }
 

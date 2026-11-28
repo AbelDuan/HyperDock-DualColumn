@@ -73,6 +73,7 @@ object SidebarColumnsHook : BaseHook() {
     private const val MAX_PARENT_DEPTH = 16
 
     @Volatile private var recyclerViewClass: Class<*>? = null
+    @Volatile private var getAdapterMethod: Method? = null
     @Volatile private var turboClass: Class<*>? = null
     @Volatile private var gridClass: Class<*>? = null
     @Volatile private var linearClass: Class<*>? = null
@@ -152,6 +153,7 @@ object SidebarColumnsHook : BaseHook() {
 
         hookRecyclerView(module, loader)
         hookAllAppsPanel(module, loader)
+        hookAllAppsAdapter(module, loader)
         hookBoxPanel(module, turbo)
         hookRotation(module, turbo)
         findDockLayoutClass(turbo)?.let { dock ->
@@ -215,6 +217,8 @@ object SidebarColumnsHook : BaseHook() {
                 candidate.parameterCount == 0 && candidate.returnType == lmClass
             }
         getLayoutManagerMethod?.isAccessible = true
+        getAdapterMethod = runCatching { rvClass.getMethod("getAdapter") }.getOrNull()
+        getAdapterMethod?.isAccessible = true
         log(module, "rv=${rvClass.name} lm=${lmClass.name} set=${setLm.name}")
         setLm.isAccessible = true
         runCatching {
@@ -225,7 +229,7 @@ object SidebarColumnsHook : BaseHook() {
                 }
                 // 展开后的“全部应用”面板（最近应用 / 所有应用）与侧边栏本体无关：
                 // 本体固定两列，这里的列数由用户单独设置（3..6）。
-                if (isAllAppsRecycler(self)) {
+                if (isAllAppsRecycler(self) || isAllAppsByAdapter(self)) {
                     val columns = desiredAllAppsColumns(self)
                     if (columns > 1) {
                         val grid = buildGrid(self.context, columns)
@@ -322,6 +326,29 @@ object SidebarColumnsHook : BaseHook() {
         log(module, "all-apps columns hooks installed: ${methods.size}")
     }
 
+    /** 第二挂载点：setAdapter 时按 adapter 类名识别全部应用列表，避免宿主复用已有 LayoutManager。 */
+    private fun hookAllAppsAdapter(module: XposedModule, loader: ClassLoader) {
+        val rvClass = runCatching { Class.forName(RECYCLER_VIEW_CLASS, false, loader) }.getOrNull() ?: return
+        val setAdapter = rvClass.methods.firstOrNull {
+            it.name == "setAdapter" && it.parameterCount == 1 && it.parameterTypes[0].name.contains("Adapter")
+        } ?: return
+        setAdapter.isAccessible = true
+        runCatching {
+            module.hook(setAdapter).intercept { chain ->
+                val result = chain.proceed()
+                val view = chain.thisObject as? View
+                if (view != null && isAllAppsByAdapter(view)) applyAllAppsGrid(module, view)
+                result
+            }
+        }.onFailure { logWarn(module, "setAdapter hook failed: ${it.message}") }
+        log(module, "all-apps adapter hook installed")
+    }
+
+    private fun isAllAppsByAdapter(view: View): Boolean {
+        val adapter = runCatching { getAdapterMethod?.invoke(view) }.getOrNull() ?: return false
+        return adapter.javaClass.name.contains("allapps", ignoreCase = true)
+    }
+
     /** 从返回值/宿主对象里找 RecyclerView（返回它自己或一层字段持有）。 */
     private fun findAnyRecyclerView(root: Any?): View? {
         val type = recyclerViewClass ?: return null
@@ -356,6 +383,7 @@ object SidebarColumnsHook : BaseHook() {
                 gridClass?.isInstance(it) == true
             } == true
         ) {
+            applyAllAppsPanelSize(recycler, columns)
             fitAllAppsItems(recycler, columns)
             return
         }
@@ -367,6 +395,7 @@ object SidebarColumnsHook : BaseHook() {
             logWarn(module, "all-apps setLayoutManager failed")
             return
         }
+        applyAllAppsPanelSize(recycler, columns)
         installedAllAppsFitter(recycler, columns)
         fitAllAppsItems(recycler, columns)
         appliedColumns[recycler] = columns
@@ -383,10 +412,29 @@ object SidebarColumnsHook : BaseHook() {
         allAppsFitters[recycler] = listener
     }
 
+    /** 面板外框宽度按列数计算，不再沿用系统写死的 3 列宽度或铺满外屏。 */
+    private fun applyAllAppsPanelSize(recycler: View, columns: Int) {
+        val context = recycler.context ?: return
+        val target = targetWidth(context, columns)
+        if (target <= 0) return
+        val parent = recycler.parent as? ViewGroup ?: return
+        val params = parent.layoutParams ?: return
+        if (params.width != target) {
+            params.width = target
+            runCatching { parent.layoutParams = params }
+        }
+        val selfParams = recycler.layoutParams
+        if (selfParams != null && selfParams.width != ViewGroup.LayoutParams.MATCH_PARENT) {
+            selfParams.width = ViewGroup.LayoutParams.MATCH_PARENT
+            runCatching { recycler.layoutParams = selfParams }
+        }
+    }
+
     private fun fitAllAppsItems(recycler: View, columns: Int) {
         val parent = recycler as? ViewGroup ?: return
         if (columns < 1) return
-        val usable = recycler.width - recycler.paddingLeft - recycler.paddingRight
+        val usable = targetWidth(recycler.context, columns).takeIf { it > 0 }
+            ?: (recycler.width - recycler.paddingLeft - recycler.paddingRight)
         if (usable <= 0) return
         val width = usable / columns
         for (index in 0 until parent.childCount) {

@@ -478,17 +478,21 @@ object SidebarColumnsHook : BaseHook() {
         allAppsFitters[recycler] = listener
     }
 
-    /** 面板宽度按“父容器可用宽度 - 侧边栏宽度 - 边距”算，避免内屏溢出、外屏空白。 */
+    /**
+     * 面板宽度 = 4 个图标单元 + 两侧留白，内外屏物理尺寸一致；
+     * 同时不超过“父容器宽度 - 侧边栏宽度”，避免外屏被侧边栏压掉一列。
+     */
     private fun allAppsTargetWidth(host: View, columns: Int): Int {
         val context = host.context ?: return 0
         val density = context.resources?.displayMetrics?.density?.takeIf { it > 0f } ?: return 0
+        val cellPx = (96f * density).roundToInt()
+        val padPx = (10f * density).roundToInt()
+        val wanted = columns * cellPx + padPx * 2
         val sidebarWidth = targetWidth(context, COLUMN_COUNT)
-        val gap = (8f * density).roundToInt()
         val parentWidth = (host.parent as? View)?.width?.takeIf { it > 0 }
             ?: context.resources?.displayMetrics?.widthPixels ?: 0
-        val available = parentWidth - sidebarWidth - gap * 2
-        val minWidth = (columns * 64f * density).roundToInt()
-        return maxOf(minWidth, available)
+        val available = parentWidth - sidebarWidth - padPx * 2
+        return if (available > 0) minOf(wanted, available) else wanted
     }
 
     /** 只改应用面板自身宽度，不动 TurboLayout 和侧边栏兄弟节点。 */
@@ -506,18 +510,17 @@ object SidebarColumnsHook : BaseHook() {
         val parent = recycler as? ViewGroup ?: return
         if (columns < 1) return
         val density = recycler.context?.resources?.displayMetrics?.density ?: 1f
-        val inset = (4f * density).roundToInt()
-        val usable = recycler.width - recycler.paddingLeft - recycler.paddingRight - inset * 2 * columns
-        if (usable <= 0) return
-        val width = usable / columns
+        val margin = (8f * density).roundToInt()
+        val span = (recycler.width - recycler.paddingLeft - recycler.paddingRight) / columns
+        if (span <= margin * 2) return
+        val width = span - margin * 2
         for (index in 0 until parent.childCount) {
             val child = parent.getChildAt(index) ?: continue
-            val params = child.layoutParams ?: continue
-            val lp = params as? ViewGroup.MarginLayoutParams ?: continue
-            if (lp.width == width && lp.leftMargin == inset && lp.rightMargin == inset) continue
+            val lp = child.layoutParams as? ViewGroup.MarginLayoutParams ?: continue
+            if (lp.width == width && lp.leftMargin == margin && lp.rightMargin == margin) continue
             lp.width = width
-            lp.leftMargin = inset
-            lp.rightMargin = inset
+            lp.leftMargin = margin
+            lp.rightMargin = margin
             runCatching { child.layoutParams = lp }
         }
     }

@@ -72,6 +72,7 @@ object SidebarColumnsHook : BaseHook() {
     /** 向上找 TurboLayout 的最大层数，防止异常层级下无限遍历。 */
     private const val MAX_PARENT_DEPTH = 16
 
+    @Volatile private var recyclerViewClass: Class<*>? = null
     @Volatile private var turboClass: Class<*>? = null
     @Volatile private var gridClass: Class<*>? = null
     @Volatile private var linearClass: Class<*>? = null
@@ -100,6 +101,8 @@ object SidebarColumnsHook : BaseHook() {
     private val appliedColumns = Collections.synchronizedMap(WeakHashMap<View, Int>())
     /** 已知的 DockLayout 实例，配置变化时用来重放。 */
     private val appliedDocks = Collections.newSetFromMap(WeakHashMap<View, Boolean>())
+    /** 全部应用面板的布局监听器，弱引用避免持有已销毁的 RecyclerView。 */
+    private val allAppsFitters = Collections.synchronizedMap(WeakHashMap<View, View.OnLayoutChangeListener>())
 
     /** 自己调用 setLayoutManager 期间置位，避免被自己的 hook 再拦截一次。 */
     private val selfSetting = ThreadLocal<Boolean>()
@@ -148,6 +151,7 @@ object SidebarColumnsHook : BaseHook() {
         log(module, "grid=${gridClass?.name} ctor=${gridCtor != null} linear=${linearClass != null}")
 
         hookRecyclerView(module, loader)
+        hookAllAppsPanel(module, loader)
         hookBoxPanel(module, turbo)
         hookRotation(module, turbo)
         findDockLayoutClass(turbo)?.let { dock ->
@@ -280,6 +284,118 @@ object SidebarColumnsHook : BaseHook() {
                 result
             }
         }.onFailure { logWarn(module, "setLayoutManager hook failed: ${it.message}") }
+    }
+
+    /**
+     * 全部应用面板的真实挂载点：宿主 DockShortCutMenu.d 会交出面板 RecyclerView。
+     * 只在那里改列数，侧边栏本体（DockLayout）保持两列不受影响。
+     */
+    private fun hookAllAppsPanel(module: XposedModule, loader: ClassLoader) {
+        val menu = runCatching {
+            Class.forName("com.miui.dock.drag.DockShortCutMenu", false, loader)
+        }.getOrNull() ?: runCatching {
+            Class.forName("com.miui.dock.drag.DockShortCutMenu", false, module::class.java.classLoader)
+        }.getOrNull()
+        if (menu == null) {
+            logWarn(module, "DockShortCutMenu unavailable; all-apps columns disabled")
+            return
+        }
+        val methods = generateSequence(menu as Class<*>?) { it.superclass }
+            .flatMap { it.declaredMethods.asSequence() }
+            .filter { it.name == "d" && it.parameterCount <= 2 }
+            .toList()
+        if (methods.isEmpty()) {
+            logWarn(module, "DockShortCutMenu.d unavailable; all-apps columns disabled")
+            return
+        }
+        methods.forEach { method ->
+            method.isAccessible = true
+            runCatching {
+                module.hook(method).intercept { chain ->
+                    val result = chain.proceed()
+                    val recycler = findAnyRecyclerView(result) ?: findAnyRecyclerView(chain.thisObject)
+                    if (recycler != null) applyAllAppsGrid(module, recycler)
+                    result
+                }
+            }.onFailure { logWarn(module, "DockShortCutMenu.d hook failed: ${it.message}") }
+        }
+        log(module, "all-apps columns hooks installed: ${methods.size}")
+    }
+
+    /** 从返回值/宿主对象里找 RecyclerView（返回它自己或一层字段持有）。 */
+    private fun findAnyRecyclerView(root: Any?): View? {
+        val type = recyclerViewClass ?: return null
+        if (root is View && type.isInstance(root)) return root
+        val queue = ArrayDeque<Any?>()
+        queue.add(root)
+        var depth = 0
+        while (queue.isNotEmpty() && depth++ < 3) {
+            val current = queue.removeFirst() ?: continue
+            if (current is View && type.isInstance(current)) return current
+            if (current is Number || current is Boolean || current is CharSequence || current is Enum<*>) continue
+            for (field in current.javaClass.declaredFields) {
+                if (Modifier.isStatic(field.modifiers)) continue
+                runCatching {
+                    field.isAccessible = true
+                    queue.add(field.get(current))
+                }
+            }
+        }
+        return null
+    }
+
+    /** 给全部应用面板设置用户选择的列数，并让 item 宽度按列数均分。 */
+    private fun applyAllAppsGrid(module: XposedModule, recycler: View) {
+        val columns = desiredAllAppsColumns(recycler)
+        val setLm = setLayoutManagerMethod ?: return
+        if (columns <= 1) {
+            appliedColumns.remove(recycler)
+            return
+        }
+        if (appliedColumns[recycler] == columns && getLayoutManagerMethod?.invoke(recycler)?.let {
+                gridClass?.isInstance(it) == true
+            } == true
+        ) {
+            fitAllAppsItems(recycler, columns)
+            return
+        }
+        val grid = buildGrid(recycler.context, columns) ?: return
+        selfSetting.set(true)
+        val ok = runCatching { setLm.invoke(recycler, grid) }.isSuccess
+        selfSetting.remove()
+        if (!ok) {
+            logWarn(module, "all-apps setLayoutManager failed")
+            return
+        }
+        installedAllAppsFitter(recycler, columns)
+        fitAllAppsItems(recycler, columns)
+        appliedColumns[recycler] = columns
+        log(module, "all-apps panel columns=$columns on ${recycler.javaClass.simpleName}")
+    }
+
+    /** 只在第一次给该 RecyclerView 挂布局监听，之后每帧按列数均分 item 宽度。 */
+    private fun installedAllAppsFitter(recycler: View, columns: Int) {
+        if (allAppsFitters.containsKey(recycler)) return
+        val listener = View.OnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+            fitAllAppsItems(v, desiredAllAppsColumns(v))
+        }
+        recycler.addOnLayoutChangeListener(listener)
+        allAppsFitters[recycler] = listener
+    }
+
+    private fun fitAllAppsItems(recycler: View, columns: Int) {
+        val parent = recycler as? ViewGroup ?: return
+        if (columns < 1) return
+        val usable = recycler.width - recycler.paddingLeft - recycler.paddingRight
+        if (usable <= 0) return
+        val width = usable / columns
+        for (index in 0 until parent.childCount) {
+            val child = parent.getChildAt(index) ?: continue
+            val params = child.layoutParams ?: continue
+            if (params.width == width) continue
+            params.width = width
+            runCatching { child.layoutParams = params }
+        }
     }
 
     /**
@@ -547,7 +663,8 @@ object SidebarColumnsHook : BaseHook() {
      * - box 面板（游戏/视频工具箱）：自身宽度写死，横屏同样放得下。
      */
     private fun desiredColumns(dock: View): Int {
-        if (!landscape && allAppsPanelOpen) return 1
+        // 全部应用面板展开时不再把侧边栏本体退回单列：那会造成展开瞬间
+        // dock 缩短、收起时又变宽，表现为双列间歇失效/来回闪烁。
         if (!landscape && hasBoxPanel(dock)) return 1
         if (!ConfigManager.getBoolean(PREF_ENABLED, false)) return 1
         return COLUMN_COUNT

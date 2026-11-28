@@ -158,7 +158,9 @@ Made with ❤️ for HyperOS users
 
 - 侧边栏本体固定两列，不受此项影响。
 - 新增 `all_apps_panel_columns_inner` / `all_apps_panel_columns_outer`（0=系统默认，3–6=自定义）。
-- 展开侧边栏后的“最近应用/所有应用”列表按当前屏读对应列数；Hook 在 `RecyclerView.setLayoutManager` 上识别 `com.miui.dock.allapps.*` 祖先并替换为 GridLayoutManager。
+- 展开侧边栏后的“最近应用/所有应用”列表按当前屏读对应列数；Hook 挂在 `com.miui.dock.drag.DockShortCutMenu.d` 拿到面板 RecyclerView，替换为 GridLayoutManager，并按列数均分 item 宽度。
+- 设置项位于「设置 → 全部应用」，不在「行为」页。
+- 侧边栏本体固定两列；全部应用面板展开时不再让 dock 回退单列，避免闪烁。
 
 ## 常驻小窗候选
 

@@ -109,8 +109,13 @@ object SidebarColumnsHook : BaseHook() {
     private val allAppsTargets = Collections.newSetFromMap(WeakHashMap<View, Boolean>())
     /** 应用面板的 SpanSizeLookup 实例 -> 该面板的 adapter（用于判断标题/分割线）。 */
     private val allAppsSpanLookups = Collections.synchronizedMap(WeakHashMap<Any, Any>())
+    /** recycler -> 宿主原本的 (SpanSizeLookup, 原列数)；用它继承“标题占满整行”的规则。 */
+    private val allAppsOriginalLookups =
+        Collections.synchronizedMap(WeakHashMap<View, Pair<Any, Int>>())
     /** adapter -> (数据列表, 主类型)；列表引用变化时重算。 */
     private val allAppsMajorTypes = Collections.synchronizedMap(WeakHashMap<Any, Pair<List<*>, Class<*>?>>())
+    /** adapter -> 面板 RecyclerView，用于查宿主原始 span 规则。 */
+    private val allAppsSpanRecyclers = Collections.synchronizedMap(WeakHashMap<Any, View>())
     /** 应用面板 RecyclerView -> 面板容器，onLayout 时用来按需加宽面板。 */
     private val allAppsHosts = Collections.synchronizedMap(WeakHashMap<View, WeakReference<View>>())
     /** 全部应用面板容器被我们改过的宽度，用来识别“旧目标宽度”的兄弟背景。 */
@@ -248,6 +253,7 @@ object SidebarColumnsHook : BaseHook() {
                 // ——它按 dock 的 displayList 算 span，会把面板标题/图标错位。
                 if (isAllAppsRecycler(self) || isAllAppsByAdapter(self)) {
                     val columns = desiredAllAppsColumns(self)
+                    captureOriginalSpanLookup(self, chain.args.getOrNull(0))
                     val rvParams = self.layoutParams
                     if (rvParams != null && rvParams.width != ViewGroup.LayoutParams.MATCH_PARENT) {
                         rvParams.width = ViewGroup.LayoutParams.MATCH_PARENT
@@ -1032,6 +1038,7 @@ object SidebarColumnsHook : BaseHook() {
         val instance = runCatching { spanDefault?.getConstructor()?.newInstance() }.getOrNull() ?: return
         spanLookupColumns[instance] = columns
         allAppsSpanLookups[instance] = adapter
+        allAppsSpanRecyclers[adapter] = recycler
         runCatching {
             spanSetter?.isAccessible = true
             spanSetter?.invoke(grid, instance)
@@ -1039,8 +1046,33 @@ object SidebarColumnsHook : BaseHook() {
         }.onFailure { logWarn(module, "all-apps span lookup failed: ${it.message}") }
     }
 
+    /** 保存宿主原本的 SpanSizeLookup 和列数，供后面继承它的“满行”规则。 */
+    private fun captureOriginalSpanLookup(recycler: View, originalLm: Any?) {
+        if (originalLm == null) return
+        val base = spanBase ?: return
+        val getter = runCatching {
+            gridClass?.methods?.firstOrNull {
+                it.parameterCount == 0 && it.returnType == base
+            }?.apply { isAccessible = true }
+        }.getOrNull() ?: return
+        val lookup = runCatching { getter.invoke(originalLm) }.getOrNull() ?: return
+        val columns = readSpanCount(originalLm).takeIf { it > 0 } ?: return
+        allAppsOriginalLookups[recycler] = lookup to columns
+    }
+
     /** 读 adapter 的数据列表并算出「主类型」（图标），其余类型视为标题/分割线。 */
     private fun allAppsSpanFor(adapter: Any, position: Int, columns: Int): Int {
+        // 首选：沿用宿主自己的规则（标题在原生布局里本就占满整行）。
+        val recycler = allAppsSpanRecyclers[adapter]
+        val source = recycler?.let { allAppsOriginalLookups[it] }
+        if (source != null) {
+            val span = runCatching {
+                spanGetter?.invoke(source.first, position) as? Int
+            }.getOrNull()
+            if (span != null && span > 0) {
+                return if (span >= source.second) columns else 1
+            }
+        }
         val cached = allAppsMajorTypes[adapter]
         val list = runCatching {
             generateSequence(adapter.javaClass as Class<*>?) { it.superclass }

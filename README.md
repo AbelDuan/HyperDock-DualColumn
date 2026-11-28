@@ -146,3 +146,4 @@ Made with ❤️ for HyperOS users
 - 勾选的来源按顺序合并后置顶，**绕过黑白名单及系统应用过滤**，无论名单如何设置都显示在最前面；其余应用保持原生相对顺序。
 - 旧的单选配置 `all_apps_sort_mode` 在 App 启动时一次性迁移到新键后删除。
 - 数据源文件：`xposed/hook/Sidebar/SidebarRecentApps.kt`。
+- 修复：`inject()` 的无栏目配置早退分支原先直接返回未排序的 `filtered`，导致排序不生效；现在该分支也返回排序后的应用列表。

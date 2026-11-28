@@ -268,4 +268,5 @@
     <string name="all_apps_columns_outer">Outer all-apps columns</string>
     <string name="all_apps_columns_auto">Auto (system default)</string>
     <string name="all_apps_columns_summary">Columns of the expanded all-apps list (3–6); the sidebar dock itself stays two columns</string>
+    <string name="all_apps_columns_title">All-apps columns</string>
 </resources>

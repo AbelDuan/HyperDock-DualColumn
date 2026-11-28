@@ -214,6 +214,9 @@ internal object SidebarShortcutController {
     // 宿主会把上次提交给它的列表原样传回来。若每次都 new 一个列表，
     // ListAdapter 的实例短路失效、DiffUtil 反复重绑，表现为“点击添加闪一下就没了”。
     @Volatile private var configGeneration = 0
+
+    /** 定位开关：true 时完全跳过自定义快捷方式注入。 */
+    private val DIAGNOSTIC_BYPASS_INJECT = true
     @Volatile private var lastInjectSource: List<Any> = emptyList()
     @Volatile private var lastInjectResult: List<Any> = emptyList()
     @Volatile private var lastInjectGeneration = -1
@@ -890,6 +893,13 @@ internal object SidebarShortcutController {
             return if (ConfigManager.getBoolean(PrefKeys.SIDEBAR_PANEL_CACHE, false)) {
                 cachedNativeModels ?: original
             } else original
+        }
+        // 定位用：整段注入临时放行，判断“点击快捷功能无效”是否由注入引起。
+        if (DIAGNOSTIC_BYPASS_INJECT) {
+            logWarn(module, "DIAG inject bypassed size=${original.size}")
+            cachedNativeModels = original.toList()
+            lastInjectResult = emptyList()
+            return original
         }
         // 每次 StateFlow 发射都代表面板重新展开/刷新，重新读取 SystemUI 的当前状态。
         queriedStates.clear()

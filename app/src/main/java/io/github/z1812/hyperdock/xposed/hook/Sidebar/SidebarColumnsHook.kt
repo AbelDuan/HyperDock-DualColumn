@@ -1096,6 +1096,44 @@ object SidebarColumnsHook : BaseHook() {
         logWarn(module, "all-apps types=$counts")
     }
 
+    private fun applyColumnCount(module: XposedModule, recycler: View, columns: Int) {
+        val tracked = appliedColumns[recycler]
+        if (tracked == columns) return
+        // 从没动过又要回到单列：保持原生 LinearLayoutManager，不做无谓替换。
+        if (tracked == null && columns == 1) return
+        val next = if (columns > 1) {
+            buildGrid(recycler.context, columns)
+        } else {
+            buildLinear(recycler.context) ?: buildGrid(recycler.context, 1)
+        }
+        if (next == null) {
+            logWarn(module, "layout manager build failed for columns=$columns")
+            return
+        }
+        val method = setLayoutManagerMethod
+        if (method == null) {
+            logWarn(module, "setLayoutManager unresolved; cannot change columns")
+            return
+        }
+        val ok = runCatching {
+            selfSetting.set(true)
+            method.isAccessible = true
+            method.invoke(recycler, next)
+        }.onFailure { logWarn(module, "setLayoutManager failed: ${it.message}") }.isSuccess
+        selfSetting.set(false)
+        if (ok) {
+            appliedColumns[recycler] = columns
+            if (gridClass?.isInstance(next) == true) installSpanLookup(module, next, columns)
+            val current = runCatching { getLayoutManagerMethod?.invoke(recycler)?.javaClass?.name }.getOrNull()
+            log(module, "columns=$columns applied via re-apply; lm=$current")
+        }
+    }
+
+    private fun refreshOrientation(view: View) {
+        val config = runCatching { view.resources?.configuration }.getOrNull() ?: return
+        landscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE
+    }
+
     /**
      * 面板尺寸：dock 及其同宽兄弟 View 一起加宽/还原，高度同步切换。
      *

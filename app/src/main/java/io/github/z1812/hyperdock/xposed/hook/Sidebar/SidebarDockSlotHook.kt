@@ -371,6 +371,13 @@ object SidebarDockSlotHook : BaseHook() {
             module.hook(submit).intercept { chain ->
                 // 同类的其它 adapter 实例（非侧边栏）必须放行。
                 if (chain.thisObject !== adapterInstance) return@intercept chain.proceed()
+                // 原生编辑态下必须原样放行：我们再插入槽位会让宿主认为列表被外部替换，
+                // 添加操作会被当成编辑取消（闪一下退出编辑模式）。
+                if (SidebarEditGuard.active) {
+                    val rawEdit = chain.args.getOrNull(0) as? List<Any>
+                    if (rawEdit != null) SidebarDockState.displayList = rawEdit
+                    return@intercept chain.proceed()
+                }
                 val raw = chain.args.getOrNull(0) as? List<Any>
                     ?: return@intercept chain.proceed()
                 val flag = chain.args.getOrNull(1) ?: false

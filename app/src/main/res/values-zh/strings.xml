@@ -258,4 +258,5 @@
     <string name="all_apps_columns_outer">外屏全部应用列数</string>
     <string name="all_apps_columns_auto">自动（保持系统默认）</string>
     <string name="all_apps_columns_summary">展开侧边栏后的应用列表列数，可设 3–6；侧边栏本体仍是两列</string>
+    <string name="all_apps_columns_title">应用列表列数</string>
 </resources>

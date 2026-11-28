@@ -157,6 +157,7 @@ object SidebarColumnsHook : BaseHook() {
         // 不再 hook DockShortCutMenu.d：那是“快捷功能/侧边栏图标”面板，
         // 改它会打断系统原生的添加流程。全部应用面板只走 allapps adapter/setLayoutManager 路径。
         hookAllAppsAdapter(module, loader)
+        hookAllAppsView(module, loader)
         hookBoxPanel(module, turbo)
         hookRotation(module, turbo)
         findDockLayoutClass(turbo)?.let { dock ->
@@ -329,6 +330,40 @@ object SidebarColumnsHook : BaseHook() {
         log(module, "all-apps columns adapter hook active")
     }
 
+    /**
+     * 精确挂载点：com.miui.dock.allapps.w 是实际的应用面板 View，
+     * A(w) 返回它的 RecyclerView。面板 attach 后直接取该 RecyclerView 改列数。
+     */
+    private fun hookAllAppsView(module: XposedModule, loader: ClassLoader) {
+        val viewClass = runCatching {
+            Class.forName("com.miui.dock.allapps.w", false, loader)
+        }.getOrNull() ?: runCatching {
+            Class.forName("com.miui.dock.allapps.w", false, module::class.java.classLoader)
+        }.getOrNull() ?: return
+        val attach = generateSequence(viewClass as Class<*>?) { it.superclass }
+            .flatMap { it.declaredMethods.asSequence() }
+            .firstOrNull { it.name == "onAttachedToWindow" && it.parameterCount == 0 }
+            ?: return
+        val getter = viewClass.declaredMethods.firstOrNull {
+            it.name == "A" && it.parameterCount == 1 && it.parameterTypes[0] == viewClass &&
+                it.returnType.name == RECYCLER_VIEW_CLASS
+        }
+        getter?.isAccessible = true
+        attach.isAccessible = true
+        runCatching {
+            module.hook(attach).intercept { chain ->
+                val result = chain.proceed()
+                val host = chain.thisObject
+                val recycler = if (getter != null && host != null) {
+                    runCatching { getter.invoke(null, host) as? View }.getOrNull()
+                } else null
+                if (recycler != null) applyAllAppsGrid(module, recycler, host as? View)
+                result
+            }
+        }.onFailure { logWarn(module, "allapps view attach hook failed: ${it.message}") }
+        log(module, "allapps view hook installed getter=${getter != null}")
+    }
+
     /** 第二挂载点：setAdapter 时按 adapter 类名识别全部应用列表，避免宿主复用已有 LayoutManager。 */
     private fun hookAllAppsAdapter(module: XposedModule, loader: ClassLoader) {
         val rvClass = runCatching { Class.forName(RECYCLER_VIEW_CLASS, false, loader) }.getOrNull() ?: return
@@ -375,7 +410,7 @@ object SidebarColumnsHook : BaseHook() {
     }
 
     /** 给全部应用面板设置用户选择的列数，并让 item 宽度按列数均分。 */
-    private fun applyAllAppsGrid(module: XposedModule, recycler: View) {
+    private fun applyAllAppsGrid(module: XposedModule, recycler: View, host: View? = null) {
         // 原生编辑态（添加快捷功能）时完全放行，宿主会按自己的列表做增删。
         if (SidebarEditGuard.active) return
         val columns = desiredAllAppsColumns(recycler)
@@ -388,7 +423,7 @@ object SidebarColumnsHook : BaseHook() {
                 gridClass?.isInstance(it) == true
             } == true
         ) {
-            applyAllAppsPanelSize(recycler, columns)
+            applyAllAppsPanelSize(host ?: recycler, columns)
             fitAllAppsItems(recycler, columns)
             return
         }
@@ -400,7 +435,7 @@ object SidebarColumnsHook : BaseHook() {
             logWarn(module, "all-apps setLayoutManager failed")
             return
         }
-        applyAllAppsPanelSize(recycler, columns)
+        applyAllAppsPanelSize(host ?: recycler, columns)
         installedAllAppsFitter(recycler, columns)
         fitAllAppsItems(recycler, columns)
         appliedColumns[recycler] = columns

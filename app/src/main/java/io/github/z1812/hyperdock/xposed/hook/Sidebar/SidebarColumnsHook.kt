@@ -154,7 +154,8 @@ object SidebarColumnsHook : BaseHook() {
         log(module, "grid=${gridClass?.name} ctor=${gridCtor != null} linear=${linearClass != null}")
 
         hookRecyclerView(module, loader)
-        hookAllAppsPanel(module, loader)
+        // 不再 hook DockShortCutMenu.d：那是“快捷功能/侧边栏图标”面板，
+        // 改它会打断系统原生的添加流程。全部应用面板只走 allapps adapter/setLayoutManager 路径。
         hookAllAppsAdapter(module, loader)
         hookBoxPanel(module, turbo)
         hookRotation(module, turbo)
@@ -325,7 +326,7 @@ object SidebarColumnsHook : BaseHook() {
                 }
             }.onFailure { logWarn(module, "DockShortCutMenu.d hook failed: ${it.message}") }
         }
-        log(module, "all-apps columns hooks installed: ${methods.size}")
+        log(module, "all-apps columns adapter hook active")
     }
 
     /** 第二挂载点：setAdapter 时按 adapter 类名识别全部应用列表，避免宿主复用已有 LayoutManager。 */
@@ -375,6 +376,8 @@ object SidebarColumnsHook : BaseHook() {
 
     /** 给全部应用面板设置用户选择的列数，并让 item 宽度按列数均分。 */
     private fun applyAllAppsGrid(module: XposedModule, recycler: View) {
+        // 原生编辑态（添加快捷功能）时完全放行，宿主会按自己的列表做增删。
+        if (SidebarEditGuard.active) return
         val columns = desiredAllAppsColumns(recycler)
         val setLm = setLayoutManagerMethod ?: return
         if (columns <= 1) {
@@ -401,7 +404,31 @@ object SidebarColumnsHook : BaseHook() {
         installedAllAppsFitter(recycler, columns)
         fitAllAppsItems(recycler, columns)
         appliedColumns[recycler] = columns
+        forceExistingGridSpan(recycler, columns)
         log(module, "all-apps panel columns=$columns on ${recycler.javaClass.simpleName}")
+    }
+
+    /** 宿主可能在 setLayoutManager 之后再把 span 写回默认值，这里直接改现有实例。 */
+    private fun forceExistingGridSpan(recycler: View, columns: Int) {
+        val lm = runCatching { getLayoutManagerMethod?.invoke(recycler) }.getOrNull() ?: return
+        if (gridClass?.isInstance(lm) != true) return
+        val renamed = lm.javaClass.methods.firstOrNull {
+            it.name == "Q" && it.parameterCount == 1 && it.parameterTypes[0] == Integer.TYPE
+        }
+        if (renamed != null && runCatching { renamed.invoke(lm, columns) }.isSuccess) return
+        generateSequence(lm.javaClass as Class<*>?) { it.superclass }
+            .flatMap { it.declaredFields.asSequence() }
+            .firstOrNull { field ->
+                field.type == Integer.TYPE && field.name.contains("f4975b")
+            }?.let { field ->
+                runCatching {
+                    field.isAccessible = true
+                    field.set(lm, columns)
+                    lm.javaClass.methods.firstOrNull {
+                        it.parameterCount == 0 && it.name.contains("requestLayout", ignoreCase = true)
+                    }?.let { runCatching { it.invoke(lm) } }
+                }
+            }
     }
 
     /** 只在第一次给该 RecyclerView 挂布局监听，之后每帧按列数均分 item 宽度。 */
@@ -420,7 +447,7 @@ object SidebarColumnsHook : BaseHook() {
         val density = metrics.density.takeIf { it > 0f } ?: return 0
         val edge = dimension(context, "dock_item_edge", FALLBACK_ITEM_EDGE_DP)
         val padding = dimension(context, "dock_item_padding", FALLBACK_ITEM_PADDING_DP)
-        val cell = maxOf(edge * 1.5f, 72f)
+        val cell = maxOf(edge * 2f, 96f)
         return ((columns * cell + (columns + 1) * padding) * density).roundToInt()
     }
 

@@ -264,4 +264,8 @@
     <string name="sidebar_columns_outer">Outer screen columns</string>
     <string name="sidebar_columns_auto">Auto (follow two-column switch)</string>
     <string name="sidebar_columns_summary">0 = auto, 1–6 = custom; inner screen falls back to one column while the all-apps panel is open</string>
+    <string name="all_apps_columns_inner">Inner all-apps columns</string>
+    <string name="all_apps_columns_outer">Outer all-apps columns</string>
+    <string name="all_apps_columns_auto">Auto (system default)</string>
+    <string name="all_apps_columns_summary">Columns of the expanded all-apps list (3–6); the sidebar dock itself stays two columns</string>
 </resources>

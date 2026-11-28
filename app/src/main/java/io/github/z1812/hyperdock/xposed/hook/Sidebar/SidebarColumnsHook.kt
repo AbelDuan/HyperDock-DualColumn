@@ -486,47 +486,14 @@ object SidebarColumnsHook : BaseHook() {
         return ((columns * cell + (columns + 1) * padding) * density).roundToInt()
     }
 
-    /** 面板外框宽度按列数计算，不再沿用系统写死的 3 列宽度或铺满外屏。 */
-    private fun applyAllAppsPanelSize(recycler: View, columns: Int) {
-        val context = recycler.context ?: return
-        val target = allAppsTargetWidth(context, columns)
+    /** 只改应用面板自身的宽度；不要动 TurboLayout 或它的兄弟节点，否则侧边栏会离边。 */
+    private fun applyAllAppsPanelSize(host: View, columns: Int) {
+        val target = allAppsTargetWidth(host.context, columns)
         if (target <= 0) return
-        val parent = recycler.parent as? ViewGroup ?: return
-        widenAllAppsGroup(parent, recycler, target)
-        // 背景层通常是 TurboLayout 里与面板容器同宽的兄弟 View，只改容器本身
-        // 会让背景仍停在原来的窄宽度。再往上处理一层。
-        val grand = parent.parent as? ViewGroup
-        if (grand != null) {
-            widenAllAppsGroup(grand, parent, target)
-            applyTurboWidthField(grand, allAppsWidths[grand] ?: grand.width, target)
-        }
-        val selfParams = recycler.layoutParams
-        if (selfParams != null && selfParams.width != ViewGroup.LayoutParams.MATCH_PARENT) {
-            selfParams.width = ViewGroup.LayoutParams.MATCH_PARENT
-            runCatching { recycler.layoutParams = selfParams }
-        }
-    }
-
-    /** 把容器及其同宽的兄弟背景一起改到目标宽度，避免只有列表变宽、背景不变。 */
-    private fun widenAllAppsGroup(group: ViewGroup, keep: View, target: Int) {
-        val params = group.layoutParams ?: return
-        val base = allAppsWidths[group] ?: params.width
-        if (params.width != target) {
-            params.width = target
-            runCatching { group.layoutParams = params }
-        }
-        allAppsWidths[group] = target
-        for (index in 0 until group.childCount) {
-            val child = group.getChildAt(index) ?: continue
-            if (child === keep) continue
-            val childParams = child.layoutParams ?: continue
-            val current = childParams.width
-            if (current != base && current != target && current != allAppsWidths[child]) continue
-            if (current == target) continue
-            childParams.width = target
-            allAppsWidths[child] = target
-            runCatching { child.layoutParams = childParams }
-        }
+        val params = host.layoutParams ?: return
+        if (params.width == target) return
+        params.width = target
+        runCatching { host.layoutParams = params }
     }
 
     private fun fitAllAppsItems(recycler: View, columns: Int) {
@@ -778,6 +745,11 @@ object SidebarColumnsHook : BaseHook() {
         }
     }
 
+    /** 当前是否存在可见的工具箱面板（音频/视频/会议/游戏等功能调整）。 */
+    internal fun boxPanelVisible(): Boolean = boxPanels.values.any {
+        runCatching { it.get()?.visibility == View.VISIBLE }.getOrDefault(false)
+    }
+
     /** 列表实际已应用的列数，宽度尚未就绪时不能把目标两列当作已生效。 */
     internal fun currentColumns(recycler: View): Int = appliedColumns[recycler] ?: 1
 
@@ -792,14 +764,8 @@ object SidebarColumnsHook : BaseHook() {
         return false
     }
 
-    /** 全部应用面板列数：只认用户显式设置的 3..6，其余保持原生。 */
-    private fun desiredAllAppsColumns(view: View): Int {
-        val metrics = view.resources?.displayMetrics
-        val outer = metrics != null && metrics.widthPixels > metrics.heightPixels
-        val key = if (outer) PrefKeys.ALL_APPS_PANEL_COLUMNS_OUTER else PrefKeys.ALL_APPS_PANEL_COLUMNS_INNER
-        val configured = ConfigManager.getInt(key, 0)
-        return if (configured in 3..6) configured else 1
-    }
+    /** 应用面板固定 4 列：内外屏一致，不再提供列数设置。 */
+    private fun desiredAllAppsColumns(view: View): Int = 4
 
     /**
      * 目标列数。两列优先，自动展开是否生效由 SidebarDefaultExpandHook 判断。

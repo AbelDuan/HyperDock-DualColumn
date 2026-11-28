@@ -58,12 +58,10 @@ internal fun SidebarBehaviorPage(
     val twoColumns = rememberBooleanPreference(prefs, PrefKeys.SIDEBAR_TWO_COLUMNS, false)
     val innerColumns = remember { mutableStateOf(prefs.getInt(PrefKeys.SIDEBAR_COLUMNS_INNER, 0)) }
     val outerColumns = remember { mutableStateOf(prefs.getInt(PrefKeys.SIDEBAR_COLUMNS_OUTER, 0)) }
-    val columnLabels = remember {
-        listOf(
-            stringResource(R.string.sidebar_columns_auto),
-            "1", "2", "3", "4", "5", "6",
-        )
-    }
+    val columnLabels = listOf(
+        stringResource(R.string.sidebar_columns_auto),
+        "1", "2", "3", "4", "5", "6",
+    )
     val panelCache = rememberBooleanPreference(prefs, PrefKeys.SIDEBAR_PANEL_CACHE, false)
     val staggeredExpand = rememberBooleanPreference(prefs, PrefKeys.SIDEBAR_STAGGERED_EXPAND, false)
     val shortcutsEnabled = rememberBooleanPreference(prefs, PrefKeys.SHORTCUTS_ENABLED, false)

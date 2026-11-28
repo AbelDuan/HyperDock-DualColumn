@@ -35,8 +35,19 @@ class HyperDockApp : Application(), XposedServiceHelper.OnServiceListener {
         super.onCreate()
         AppLocaleController.apply(this, configPrefs.getString(PrefKeys.LOCALE, "").orEmpty())
         migrateRecentSortConfig()
+        migrateExpandAllApps()
         XposedServiceHelper.registerListener(this)
         configPrefs.registerOnSharedPreferenceChangeListener(configPrefsListener)
+    }
+
+    /** 一次性的默认展开迁移：固定四列版本起默认展开全部应用。 */
+    private fun migrateExpandAllApps() {
+        val marker = "migrated_expand_all_apps_v2"
+        if (configPrefs.getBoolean(marker, false)) return
+        configPrefs.edit()
+            .putBoolean(PrefKeys.SIDEBAR_EXPAND_ALL_APPS, true)
+            .putBoolean(marker, true)
+            .apply()
     }
 
     /** 把旧的单选排序设置迁移成“勾选来源 + 顺序”，只做一次。 */

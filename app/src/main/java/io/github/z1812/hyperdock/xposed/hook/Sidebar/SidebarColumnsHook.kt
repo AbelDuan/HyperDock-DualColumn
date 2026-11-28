@@ -466,7 +466,7 @@ object SidebarColumnsHook : BaseHook() {
     private fun applyAllAppsSpan(module: XposedModule, recycler: View, columns: Int) {
         val setLm = setLayoutManagerMethod
         val current = runCatching { getLayoutManagerMethod?.invoke(recycler) }.getOrNull()
-        if (gridClass?.isInstance(current) == true) {
+        if (current != null && gridClass?.isInstance(current) == true) {
             installAllAppsSpanLookup(module, current, recycler, columns)
             forceExistingGridSpan(recycler, columns)
             appliedColumns[recycler] = columns

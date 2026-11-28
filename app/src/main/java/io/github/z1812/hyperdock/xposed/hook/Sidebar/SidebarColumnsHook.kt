@@ -468,6 +468,7 @@ object SidebarColumnsHook : BaseHook() {
         }
         logWarn(module, "all-apps apply columns=$columns target=${computeAllAppsTargetWidth(target, columns)} " +
             "host=${host?.width} recycler=${recycler.width} children=${(recycler as? ViewGroup)?.childCount}")
+        logAllAppsTypes(module, recycler)
     }
 
     /** 设置 span 列数；宿主可能写回默认值，因此每次调用都强制落一次。 */
@@ -1060,20 +1061,28 @@ object SidebarColumnsHook : BaseHook() {
         allAppsOriginalLookups[recycler] = lookup to columns
     }
 
-    /** 读 adapter 的数据列表并算出「主类型」（图标），其余类型视为标题/分割线。 */
+    /**
+     * 某个位置应占几列。
+     *
+     * 只认宿主自己的规则：原生布局里标题占满整行、其它各占一格，我们把“满行”
+     * 的列数换成当前列数即可。拿不到宿主规则时一律返回 1 —— 宁可标题窄一点，
+     * 也不能把「快捷功能」这类少数类型误判成标题而每项独占一行。
+     */
     private fun allAppsSpanFor(adapter: Any, position: Int, columns: Int): Int {
-        // 首选：沿用宿主自己的规则（标题在原生布局里本就占满整行）。
         val recycler = allAppsSpanRecyclers[adapter]
         val source = recycler?.let { allAppsOriginalLookups[it] }
         if (source != null) {
             val span = runCatching {
                 spanGetter?.invoke(source.first, position) as? Int
             }.getOrNull()
-            if (span != null && span > 0) {
-                return if (span >= source.second) columns else 1
-            }
+            if (span != null && span >= source.second) return columns
         }
-        val cached = allAppsMajorTypes[adapter]
+        return 1
+    }
+
+    /** 诊断：打印面板列表里实际出现的模型类型和数量，用于确认标题类。 */
+    private fun logAllAppsTypes(module: XposedModule, recycler: View) {
+        val adapter = runCatching { getAdapterMethod?.invoke(recycler) }.getOrNull() ?: return
         val list = runCatching {
             generateSequence(adapter.javaClass as Class<*>?) { it.superclass }
                 .flatMap { it.declaredFields.asSequence() }
@@ -1082,57 +1091,9 @@ object SidebarColumnsHook : BaseHook() {
                     field.isAccessible = true
                     field.get(adapter) as? List<*>
                 }
-        }.getOrNull() ?: return 1
-        val major = if (cached != null && cached.first === list) {
-            cached.second
-        } else {
-            val computed = runCatching {
-                list.filterNotNull().groupingBy { it.javaClass }.eachCount()
-                    .maxByOrNull { it.value }?.key
-            }.getOrNull()
-            allAppsMajorTypes[adapter] = list to computed
-            computed
-        } ?: return 1
-        val item = list.getOrNull(position) ?: return 1
-        return if (item != null && item.javaClass == major) 1 else columns
-    }
-
-    private fun applyColumnCount(module: XposedModule, recycler: View, columns: Int) {
-        val tracked = appliedColumns[recycler]
-        if (tracked == columns) return
-        // 从没动过又要回到单列：保持原生 LinearLayoutManager，不做无谓替换。
-        if (tracked == null && columns == 1) return
-        val next = if (columns > 1) {
-            buildGrid(recycler.context, columns)
-        } else {
-            buildLinear(recycler.context) ?: buildGrid(recycler.context, 1)
-        }
-        if (next == null) {
-            logWarn(module, "layout manager build failed for columns=$columns")
-            return
-        }
-        val method = setLayoutManagerMethod
-        if (method == null) {
-            logWarn(module, "setLayoutManager unresolved; cannot change columns")
-            return
-        }
-        val ok = runCatching {
-            selfSetting.set(true)
-            method.isAccessible = true
-            method.invoke(recycler, next)
-        }.onFailure { logWarn(module, "setLayoutManager failed: ${it.message}") }.isSuccess
-        selfSetting.set(false)
-        if (ok) {
-            appliedColumns[recycler] = columns
-            if (gridClass?.isInstance(next) == true) installSpanLookup(module, next, columns)
-            val current = runCatching { getLayoutManagerMethod?.invoke(recycler)?.javaClass?.name }.getOrNull()
-            log(module, "columns=$columns applied via re-apply; lm=$current")
-        }
-    }
-
-    private fun refreshOrientation(view: View) {
-        val config = runCatching { view.resources?.configuration }.getOrNull() ?: return
-        landscape = config.orientation == Configuration.ORIENTATION_LANDSCAPE
+        }.getOrNull() ?: return
+        val counts = list.filterNotNull().groupingBy { it.javaClass.simpleName }.eachCount()
+        logWarn(module, "all-apps types=$counts")
     }
 
     /**

@@ -216,7 +216,7 @@ internal object SidebarShortcutController {
     @Volatile private var configGeneration = 0
 
     /** 定位开关：true 时完全跳过自定义快捷方式注入。 */
-    private val DIAGNOSTIC_BYPASS_INJECT = true
+    private val DIAGNOSTIC_BYPASS_INJECT = false
     @Volatile private var lastInjectSource: List<Any> = emptyList()
     @Volatile private var lastInjectResult: List<Any> = emptyList()
     @Volatile private var lastInjectGeneration = -1

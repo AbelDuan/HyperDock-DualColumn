@@ -413,8 +413,6 @@ object SidebarColumnsHook : BaseHook() {
 
     /** 给全部应用面板设置用户选择的列数，并让 item 宽度按列数均分。 */
     private fun applyAllAppsGrid(module: XposedModule, recycler: View, host: View? = null) {
-        // 原生编辑态（添加快捷功能）时完全放行，宿主会按自己的列表做增删。
-        if (SidebarEditGuard.active) return
         val columns = desiredAllAppsColumns(recycler)
         val setLm = setLayoutManagerMethod ?: return
         if (columns <= 1) {

@@ -56,11 +56,11 @@ internal fun SidebarBehaviorPage(
     val quickSlotLabel = rememberQuickSlotLabel(prefs)
     val expandAllApps = rememberBooleanPreference(prefs, PrefKeys.SIDEBAR_EXPAND_ALL_APPS, false)
     val twoColumns = rememberBooleanPreference(prefs, PrefKeys.SIDEBAR_TWO_COLUMNS, false)
-    val innerColumns = remember { mutableStateOf(prefs.getInt(PrefKeys.SIDEBAR_COLUMNS_INNER, 0)) }
-    val outerColumns = remember { mutableStateOf(prefs.getInt(PrefKeys.SIDEBAR_COLUMNS_OUTER, 0)) }
+    val innerColumns = remember { mutableStateOf(prefs.getInt(PrefKeys.ALL_APPS_PANEL_COLUMNS_INNER, 0)) }
+    val outerColumns = remember { mutableStateOf(prefs.getInt(PrefKeys.ALL_APPS_PANEL_COLUMNS_OUTER, 0)) }
     val columnLabels = listOf(
-        stringResource(R.string.sidebar_columns_auto),
-        "1", "2", "3", "4", "5", "6",
+        stringResource(R.string.all_apps_columns_auto),
+        "3", "4", "5", "6",
     )
     val panelCache = rememberBooleanPreference(prefs, PrefKeys.SIDEBAR_PANEL_CACHE, false)
     val staggeredExpand = rememberBooleanPreference(prefs, PrefKeys.SIDEBAR_STAGGERED_EXPAND, false)
@@ -143,26 +143,28 @@ internal fun SidebarBehaviorPage(
                     twoColumns.value,
                 ) { setTwoColumns(it) }
                 PreferenceDropdown(
-                    stringResource(R.string.sidebar_columns_inner),
-                    stringResource(R.string.sidebar_columns_summary),
+                    stringResource(R.string.all_apps_columns_inner),
+                    stringResource(R.string.all_apps_columns_summary),
                     null,
                     columnLabels,
-                    innerColumns.value.coerceIn(0, columnLabels.lastIndex),
+                    innerColumns.value.coerceIn(3, 6) - 3,
                     true,
                 ) { index ->
-                    innerColumns.value = index
-                    prefs.putInt(PrefKeys.SIDEBAR_COLUMNS_INNER, index)
+                    val columns = index + 3
+                    innerColumns.value = columns
+                    prefs.putInt(PrefKeys.ALL_APPS_PANEL_COLUMNS_INNER, columns)
                 }
                 PreferenceDropdown(
-                    stringResource(R.string.sidebar_columns_outer),
-                    stringResource(R.string.sidebar_columns_summary),
+                    stringResource(R.string.all_apps_columns_outer),
+                    stringResource(R.string.all_apps_columns_summary),
                     null,
                     columnLabels,
-                    outerColumns.value.coerceIn(0, columnLabels.lastIndex),
+                    outerColumns.value.coerceIn(3, 6) - 3,
                     true,
                 ) { index ->
-                    outerColumns.value = index
-                    prefs.putInt(PrefKeys.SIDEBAR_COLUMNS_OUTER, index)
+                    val columns = index + 3
+                    outerColumns.value = columns
+                    prefs.putInt(PrefKeys.ALL_APPS_PANEL_COLUMNS_OUTER, columns)
                 }
                 // 两列打开时才出现：这一格只在速记旁边占半个格子。
                 AnimatedVisibility(

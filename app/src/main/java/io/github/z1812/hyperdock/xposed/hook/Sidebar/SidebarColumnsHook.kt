@@ -440,17 +440,21 @@ object SidebarColumnsHook : BaseHook() {
         allAppsTargets.add(recycler)
         if (host != null) allAppsHosts[recycler] = WeakReference(host)
         val columns = desiredAllAppsColumns(recycler)
-        // RecyclerView 必须铺满宿主容器，否则图标只排在左半边。
-        val rvParams = recycler.layoutParams
-        if (rvParams != null && rvParams.width != ViewGroup.LayoutParams.MATCH_PARENT) {
-            rvParams.width = ViewGroup.LayoutParams.MATCH_PARENT
-            runCatching { recycler.layoutParams = rvParams }
-        }
         applyAllAppsSpan(module, recycler, columns)
         installAllAppsLayoutHook(module, recycler, host, columns)
-        repositionAllAppsItems(recycler, columns)
-        logWarn(module, "all-apps apply columns=$columns host=${host?.width} " +
-            "recycler=${recycler.width} children=${(recycler as? ViewGroup)?.childCount}")
+        // attach 阶段父容器已有宽度，先按目标宽度把面板/列表/item 一次对齐，
+        // 避免“第一帧窄、随后突然变宽但图标没跟上”。
+        val target = host ?: recycler
+        ensureAllAppsLayout(target, recycler, columns)
+        if (host != null) {
+            // 宿主完成首帧布局后可能写回自己的宽度，再对齐一次。
+            host.post {
+                val cols = desiredAllAppsColumns(recycler)
+                ensureAllAppsLayout(host, recycler, cols)
+            }
+        }
+        logWarn(module, "all-apps apply columns=$columns target=${computeAllAppsTargetWidth(target, columns)} " +
+            "host=${host?.width} recycler=${recycler.width} children=${(recycler as? ViewGroup)?.childCount}")
     }
 
     /** 设置 span 列数；宿主可能写回默认值，因此每次调用都强制落一次。 */
@@ -519,17 +523,14 @@ object SidebarColumnsHook : BaseHook() {
                     if (appliedColumns[view] != cols) {
                         applyAllAppsSpan(module, view, cols)
                     }
-                    allAppsHosts[view]?.get()?.let { widenAllAppsPanel(it, cols) }
-                    repositionAllAppsItems(view, cols)
+                    val panel = allAppsHosts[view]?.get()
+                    if (panel != null) ensureAllAppsLayout(panel, view, cols)
+                    else repositionAllAppsItems(view, cols)
                 }
                 result
             }
             logWarn(module, "all-apps onLayout hook installed")
         }.onFailure { logWarn(module, "all-apps onLayout hook failed: ${it.message}") }
-        if (host != null) {
-            // 首帧宿主尺寸就绪后补一次。
-            host.post { repositionAllAppsItems(recycler, desiredAllAppsColumns(recycler)) }
-        }
     }
 
     /** 读 GridLayoutManager 当前的 spanCount（R8 把字段名混淆成 f4975b）。 */
@@ -545,43 +546,66 @@ object SidebarColumnsHook : BaseHook() {
             } ?: -1
 
     /**
-     * 宿主给的应用面板宽度偏窄（内屏实测 841px，4 列会挤），按「4 格最小宽度」补到够用。
+     * 计算应用面板的目标宽度：4 格 × 单格宽度 + 两侧留白，
+     * 上限为「父容器宽度 − 侧边栏宽度 − 留白」，保证不顶出屏幕边缘。
      *
-     * 只加宽、不缩窄：外屏宿主原本就给得够宽，保持不动，这样内外屏观感一致。
-     * 上限是父容器宽度减去侧边栏宽度，保证面板不会顶出屏幕边缘。
+     * 只依赖父容器宽度，不读 host/host.width —— 面板刚 attach 时自身宽度是 0，
+     * 依赖它会导致第一帧按 0 计算，表现为“先窄后宽”。
      */
-    private fun widenAllAppsPanel(host: View, columns: Int) {
-        val context = host.context ?: return
-        val density = context.resources?.displayMetrics?.density?.takeIf { it > 0f } ?: return
-        val parent = host.parent as? ViewGroup ?: return
-        val parentWidth = parent.width
-        if (parentWidth <= 0) return
+    private fun computeAllAppsTargetWidth(host: View, columns: Int): Int {
+        val context = host.context ?: return 0
+        val metrics = context.resources?.displayMetrics ?: return 0
+        val density = metrics.density.takeIf { it > 0f } ?: return 0
+        val parent = host.parent as? ViewGroup
+        val parentWidth = parent?.width?.takeIf { it > 0 } ?: metrics.widthPixels
         val gap = (12f * density).roundToInt()
-        val cell = (86f * density).roundToInt()
+        val cell = (100f * density).roundToInt()
         val wanted = columns * cell + gap * 2
         var dockWidth = 0
-        for (index in 0 until parent.childCount) {
-            val child = parent.getChildAt(index) ?: continue
-            if (child === host) continue
-            if (dockClass?.isInstance(child) == true) dockWidth = maxOf(dockWidth, child.width)
+        if (parent != null) {
+            for (index in 0 until parent.childCount) {
+                val child = parent.getChildAt(index) ?: continue
+                if (child === host) continue
+                if (dockClass?.isInstance(child) == true) dockWidth = maxOf(dockWidth, child.width)
+            }
         }
         if (dockWidth <= 0) dockWidth = targetWidth(context, COLUMN_COUNT)
         val limit = parentWidth - dockWidth - gap * 2
-        if (limit <= 0) return
-        val target = minOf(wanted, limit)
-        // 只在宿主宽度确实偏窄时补宽；已经够宽（外屏）就不动。
-        if (host.width <= 0 || host.width >= target) return
-        val params = host.layoutParams ?: return
-        if (params.width == target) return
-        params.width = target
-        runCatching { host.layoutParams = params }
+        return if (limit > 0) minOf(wanted, limit) else wanted
+    }
+
+    /**
+     * 让面板容器、列表、以及每个 item 都按同一个目标宽度对齐。
+     *
+     * item 宽度必须用目标宽度算，不能等 RecyclerView 重新测量后再读 recycler.width —
+     * 那一帧列表还没变宽，图标会继续挤在窄宽度里。
+     */
+    private fun ensureAllAppsLayout(host: View, recycler: View, columns: Int) {
+        val target = computeAllAppsTargetWidth(host, columns)
+        if (target <= 0) return
+        val hostParams = host.layoutParams
+        if (hostParams != null && hostParams.width != target) {
+            hostParams.width = target
+            runCatching { host.layoutParams = hostParams }
+        }
+        var recyclerWidth = 0
+        val recyclerParams = recycler.layoutParams
+        if (recyclerParams != null) {
+            if (recyclerParams.width != ViewGroup.LayoutParams.MATCH_PARENT) {
+                recyclerParams.width = ViewGroup.LayoutParams.MATCH_PARENT
+                runCatching { recycler.layoutParams = recyclerParams }
+            }
+            recyclerWidth = target
+        }
+        repositionAllAppsItems(recycler, columns, recyclerWidth)
     }
 
     /** 把每个 item 在 RecyclerView 可用宽度内平均分成 columns 份，四边留同一间距。 */
-    private fun repositionAllAppsItems(recycler: View, columns: Int) {
+    private fun repositionAllAppsItems(recycler: View, columns: Int, panelWidth: Int = 0) {
         val container = recycler as? ViewGroup ?: return
         if (columns < 1) return
-        val usable = recycler.width - recycler.paddingLeft - recycler.paddingRight
+        val base = if (panelWidth > 0) panelWidth else recycler.width
+        val usable = base - recycler.paddingLeft - recycler.paddingRight
         if (usable <= 0) return
         val density = recycler.context?.resources?.displayMetrics?.density ?: 1f
         val margin = (10f * density).roundToInt()

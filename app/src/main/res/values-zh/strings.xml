@@ -250,4 +250,8 @@
     <string name="back">返回</string>
     <string name="slider_input_value">数值</string>
     <string name="slider_input_range">请输入 %1$s 到 %2$s 之间的数值</string>
+    <string name="sidebar_columns_inner">内屏列数</string>
+    <string name="sidebar_columns_outer">外屏列数</string>
+    <string name="sidebar_columns_auto">自动（跟随两列开关）</string>
+    <string name="sidebar_columns_summary">0 为自动，1–6 为自定义；全部应用面板展开时内屏仍会回到单列</string>
 </resources>

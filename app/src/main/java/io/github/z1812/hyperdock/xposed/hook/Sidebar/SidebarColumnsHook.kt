@@ -1146,15 +1146,42 @@ object SidebarColumnsHook : BaseHook() {
     private fun allAppsSpanFor(adapter: Any, position: Int, columns: Int): Int {
         val list = allAppsListOf(adapter) ?: return 1
         val item = list.getOrNull(position) ?: return 1
+        if (!isFullRowModel(adapter, list, item)) return 1
+        // 必须保证 spanIndex + span <= columns，否则 GridLayoutManager
+        // 用它按 spanCount 分配的索引数组会越界（滚动时闪退）。
+        // 只有正好落在行首（spanIndex == 0）的标题/分割线才占满整行。
+        return if (spanIndexAt(adapter, list, position, columns) == 0) columns else 1
+    }
+
+    /** 该模型是否为标题/分割线：类名带 App/Shortcut 的永远不是，其余看实例数。 */
+    private fun isFullRowModel(adapter: Any, list: List<*>, item: Any): Boolean {
         val name = item.javaClass.simpleName
         if (name.contains("Shortcut", ignoreCase = true) ||
             name.contains("App", ignoreCase = true)
         ) {
-            return 1
+            return false
         }
-        val counts = allAppsTypeCounts(adapter, list) ?: return 1
-        val count = counts[name] ?: return 1
-        return if (count <= TITLE_MAX_INSTANCES) columns else 1
+        val counts = allAppsTypeCounts(adapter, list) ?: return false
+        val count = counts[name] ?: return false
+        return count <= TITLE_MAX_INSTANCES
+    }
+
+    /**
+     * 按「标题占满整行、其余一格」的规则，算出该 position 的行内起始列。
+     *
+     * 与 GridLayoutManager 的 SpanSizeLookup 计算方式一致：把前面所有 item
+     * 的 span 累加后对列数取模。
+     */
+    private fun spanIndexAt(adapter: Any, list: List<*>, position: Int, columns: Int): Int {
+        var index = 0
+        for (i in 0 until position) {
+            val current = list.getOrNull(i)
+            val fullRow = current != null && isFullRowModel(adapter, list, current)
+            // 与实际返回的 span 保持一致：满行项只有在行首才真正占满。
+            val span = if (fullRow && index == 0) columns else 1
+            index = (index + span) % columns
+        }
+        return index
     }
 
     /** 面板 adapter 持有的数据列表。 */

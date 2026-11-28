@@ -936,7 +936,13 @@ internal object SidebarShortcutController {
             injectedPrefixSize = 0
             officialItemCount = filtered.size
             injectedTail = emptyList()
-            return filtered
+            // 这条分支以前直接返回 filtered，绕过了 sortByRecent 的结果，
+            // 导致未配置栏目/快捷方式时最近应用排序完全不生效。
+            return if (dividerIndex >= 0) {
+                nativeAllApps + filtered[dividerIndex] + nativeQuickFunctions
+            } else {
+                nativeAllApps
+            }
         }
         injectedPrefixSize = 0
 

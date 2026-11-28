@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,12 +55,6 @@ internal fun SidebarBehaviorPage(
     val quickSlotLabel = rememberQuickSlotLabel(prefs)
     val expandAllApps = rememberBooleanPreference(prefs, PrefKeys.SIDEBAR_EXPAND_ALL_APPS, false)
     val twoColumns = rememberBooleanPreference(prefs, PrefKeys.SIDEBAR_TWO_COLUMNS, false)
-    val innerColumns = remember { mutableStateOf(prefs.getInt(PrefKeys.ALL_APPS_PANEL_COLUMNS_INNER, 0)) }
-    val outerColumns = remember { mutableStateOf(prefs.getInt(PrefKeys.ALL_APPS_PANEL_COLUMNS_OUTER, 0)) }
-    val columnLabels = listOf(
-        stringResource(R.string.all_apps_columns_auto),
-        "3", "4", "5", "6",
-    )
     val panelCache = rememberBooleanPreference(prefs, PrefKeys.SIDEBAR_PANEL_CACHE, false)
     val staggeredExpand = rememberBooleanPreference(prefs, PrefKeys.SIDEBAR_STAGGERED_EXPAND, false)
     val shortcutsEnabled = rememberBooleanPreference(prefs, PrefKeys.SHORTCUTS_ENABLED, false)
@@ -142,30 +135,6 @@ internal fun SidebarBehaviorPage(
                     null,
                     twoColumns.value,
                 ) { setTwoColumns(it) }
-                PreferenceDropdown(
-                    stringResource(R.string.all_apps_columns_inner),
-                    stringResource(R.string.all_apps_columns_summary),
-                    null,
-                    columnLabels,
-                    innerColumns.value.coerceIn(3, 6) - 3,
-                    true,
-                ) { index ->
-                    val columns = index + 3
-                    innerColumns.value = columns
-                    prefs.putInt(PrefKeys.ALL_APPS_PANEL_COLUMNS_INNER, columns)
-                }
-                PreferenceDropdown(
-                    stringResource(R.string.all_apps_columns_outer),
-                    stringResource(R.string.all_apps_columns_summary),
-                    null,
-                    columnLabels,
-                    outerColumns.value.coerceIn(3, 6) - 3,
-                    true,
-                ) { index ->
-                    val columns = index + 3
-                    outerColumns.value = columns
-                    prefs.putInt(PrefKeys.ALL_APPS_PANEL_COLUMNS_OUTER, columns)
-                }
                 // 两列打开时才出现：这一格只在速记旁边占半个格子。
                 AnimatedVisibility(
                     visible = twoColumns.value,

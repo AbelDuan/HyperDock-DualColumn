@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,6 +56,14 @@ internal fun SidebarBehaviorPage(
     val quickSlotLabel = rememberQuickSlotLabel(prefs)
     val expandAllApps = rememberBooleanPreference(prefs, PrefKeys.SIDEBAR_EXPAND_ALL_APPS, false)
     val twoColumns = rememberBooleanPreference(prefs, PrefKeys.SIDEBAR_TWO_COLUMNS, false)
+    val innerColumns = remember { mutableStateOf(prefs.getInt(PrefKeys.SIDEBAR_COLUMNS_INNER, 0)) }
+    val outerColumns = remember { mutableStateOf(prefs.getInt(PrefKeys.SIDEBAR_COLUMNS_OUTER, 0)) }
+    val columnLabels = remember {
+        listOf(
+            stringResource(R.string.sidebar_columns_auto),
+            "1", "2", "3", "4", "5", "6",
+        )
+    }
     val panelCache = rememberBooleanPreference(prefs, PrefKeys.SIDEBAR_PANEL_CACHE, false)
     val staggeredExpand = rememberBooleanPreference(prefs, PrefKeys.SIDEBAR_STAGGERED_EXPAND, false)
     val shortcutsEnabled = rememberBooleanPreference(prefs, PrefKeys.SHORTCUTS_ENABLED, false)
@@ -135,6 +144,28 @@ internal fun SidebarBehaviorPage(
                     null,
                     twoColumns.value,
                 ) { setTwoColumns(it) }
+                PreferenceDropdown(
+                    stringResource(R.string.sidebar_columns_inner),
+                    stringResource(R.string.sidebar_columns_summary),
+                    null,
+                    columnLabels,
+                    innerColumns.value.coerceIn(0, columnLabels.lastIndex),
+                    true,
+                ) { index ->
+                    innerColumns.value = index
+                    prefs.putInt(PrefKeys.SIDEBAR_COLUMNS_INNER, index)
+                }
+                PreferenceDropdown(
+                    stringResource(R.string.sidebar_columns_outer),
+                    stringResource(R.string.sidebar_columns_summary),
+                    null,
+                    columnLabels,
+                    outerColumns.value.coerceIn(0, columnLabels.lastIndex),
+                    true,
+                ) { index ->
+                    outerColumns.value = index
+                    prefs.putInt(PrefKeys.SIDEBAR_COLUMNS_OUTER, index)
+                }
                 // 两列打开时才出现：这一格只在速记旁边占半个格子。
                 AnimatedVisibility(
                     visible = twoColumns.value,

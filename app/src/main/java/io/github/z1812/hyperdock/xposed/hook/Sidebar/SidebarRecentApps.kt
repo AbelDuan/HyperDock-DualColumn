@@ -37,6 +37,7 @@ internal object SidebarRecentApps {
             SORT_RECENT_TASK -> recentTasks(context)
             else -> emptyList()
         }.distinct().take(LIMIT)
+        if (result.isEmpty()) log("no packages for $mode (check usage-stats/recent-task access)")
         cachedMode = mode
         cachedAt = now
         cachedPackages = result

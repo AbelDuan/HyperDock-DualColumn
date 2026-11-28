@@ -211,6 +211,12 @@ internal object SidebarShortcutController {
     private var preparePermanentlyFailed = false
     private var injectionLogged = false
     @Volatile private var cachedNativeModels: List<Any>? = null
+    // 宿主会把上次提交给它的列表原样传回来。若每次都 new 一个列表，
+    // ListAdapter 的实例短路失效、DiffUtil 反复重绑，表现为“点击添加闪一下就没了”。
+    @Volatile private var configGeneration = 0
+    @Volatile private var lastInjectSource: List<Any> = emptyList()
+    @Volatile private var lastInjectResult: List<Any> = emptyList()
+    @Volatile private var lastInjectGeneration = -1
 
     private fun log(module: XposedModule, message: String) {
         Log.log(module, Log.DEBUG, TAG, message)
@@ -891,6 +897,18 @@ internal object SidebarShortcutController {
         // Remove our previous models first so deleting a quick launch entry also
         // removes its stale icon/title from the sidebar on the next refresh.
         val source = original.filterNot { isInjectedTitle(it) || isInjectedShortcut(it) }
+        fun finish(result: List<Any>): List<Any> {
+            lastInjectSource = source.toList()
+            lastInjectResult = result
+            lastInjectGeneration = configGeneration
+            activeAdapterModels = result
+            return result
+        }
+        if (source.isNotEmpty() && lastInjectResult.isNotEmpty() &&
+            configGeneration == lastInjectGeneration && source == lastInjectSource
+        ) {
+            return lastInjectResult
+        }
         // 用户勾选的最近来源按自定义顺序依次置顶，且绕过黑白名单；
         // 原生列表与它的包装状态都走同一条注入路径，避免两份列表不一致。
         val openEnabled = ConfigManager.getBoolean(PrefKeys.ALL_APPS_RECENT_OPEN_ENABLED, false)
@@ -938,11 +956,11 @@ internal object SidebarShortcutController {
             injectedTail = emptyList()
             // 这条分支以前直接返回 filtered，绕过了 sortByRecent 的结果，
             // 导致未配置栏目/快捷方式时最近应用排序完全不生效。
-            return if (dividerIndex >= 0) {
+            return finish(if (dividerIndex >= 0) {
                 nativeAllApps + filtered[dividerIndex] + nativeQuickFunctions
             } else {
                 nativeAllApps
-            }
+            })
         }
         injectedPrefixSize = 0
 
@@ -979,7 +997,7 @@ internal object SidebarShortcutController {
         if (ordered.isNotEmpty() && created == 0) {
             log(module, "shortcut models unavailable: requested=${ordered.size} quickInfoFields=${quickInfoStringFields.size}")
         }
-        return result
+        return finish(result)
     }
 
     private fun injectWrappedState(module: XposedModule, value: Any?): Any? {
@@ -1813,6 +1831,7 @@ internal object SidebarShortcutController {
     private fun installConfigChangeListener() {
         if (configListenerRegistered) return
         ConfigManager.addChangeListener {
+            configGeneration++
             SidebarRecentApps.invalidate()
             synchronized(quickIconLock) {
                 quickIconGeneration++

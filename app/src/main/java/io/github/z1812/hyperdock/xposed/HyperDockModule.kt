@@ -18,7 +18,7 @@ class HyperDockModule : XposedModule() {
     private var configManagerInitialized = false
 
     /** 定位开关：true 时侧边栏相关 Hook 全部不安装。 */
-    private val DIAGNOSTIC_NO_HOOKS = true
+    private val DIAGNOSTIC_NO_HOOKS = false
 
     override fun onPackageLoaded(param: PackageLoadedParam) {
         initializeConfigManager()

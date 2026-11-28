@@ -147,6 +147,7 @@ Made with ❤️ for HyperOS users
 - 旧的单选配置 `all_apps_sort_mode` 在 App 启动时一次性迁移到新键后删除。
 - 数据源文件：`xposed/hook/Sidebar/SidebarRecentApps.kt`。
 - 修复：`inject()` 的无栏目配置早退分支原先直接返回未排序的 `filtered`，导致排序不生效；现在该分支也返回排序后的应用列表。
+- 修复：名单/系统应用过滤原先作用于整份列表，会把原生“快捷功能”段里的系统项一起隐藏，导致点击添加后闪一下消失；现在只对“全部应用”段过滤，快捷功能段原样保留。
 
 ### 固定签名
 - 发布密钥：`tooling/keys/hyperdock-release.jks`（PKCS12，alias `hyperdock`，store/key 密码 `hyperdock2026`，证书 SHA-256 `41:06:A7:50:FF:AD:84:C9:E0:32:DE:07:C5:A2:B3:32:3C:D5:DC:5B:C9:C1:46:3A:36:38:7D:B9:AA:84:13:6F`）。

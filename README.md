@@ -153,3 +153,13 @@ Made with ❤️ for HyperOS users
 ### 固定签名
 - 发布密钥：`tooling/keys/hyperdock-release.jks`（PKCS12，alias `hyperdock`，store/key 密码 `hyperdock2026`，证书 SHA-256 `41:06:A7:50:FF:AD:84:C9:E0:32:DE:07:C5:A2:B3:32:3C:D5:DC:5B:C9:C1:46:3A:36:38:7D:B9:AA:84:13:6F`）。
 - CI 的 `Use checked-in release key` 步骤把它注入 `KEYSTORE_PATH` 等环境变量，之后每次构建都用同一把钥匙签 `releaseFast`；不要再回退到 runner 的 Android Debug 签名。
+
+## 内屏/外屏独立列数
+
+- 新增 `sidebar_columns_inner` / `sidebar_columns_outer`（0=跟随原两列开关，1–6=自定义）。
+- 外屏（横屏，宽>高）读 outer，内屏读 inner；面板宽度按列数同步计算，不再固定按两列宽度。
+- 竖屏下全部应用面板展开或工具箱面板出现时仍回退单列，避免挤压。
+
+## 常驻小窗候选
+
+- 「速记旁的图标」的内置快捷方式候选改为使用 SystemUI 实探目录（`ShortcutCatalog.all`），与“快捷方式”页一致；此前只列内置写死的 QS 表，本机实际支持的快捷功能缺失，表现为无法添加到常驻小窗。

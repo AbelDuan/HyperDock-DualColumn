@@ -118,6 +118,9 @@ object SidebarColumnsHook : BaseHook() {
     private val allAppsGridColumns = Collections.synchronizedMap(WeakHashMap<Any, Int>())
     /** setSpanCount 是否已 hook（只装一次）。 */
     @Volatile private var spanCountLocked = false
+    /** 定位开关：true 时完全不改造「全部应用」面板。 */
+    private val DIAGNOSTIC_DISABLE_ALL_APPS = true
+
     /** 定位开关：true 时不 hook RecyclerView.onLayout。 */
     private val DIAGNOSTIC_NO_LAYOUT_HOOK = true
 
@@ -468,6 +471,11 @@ object SidebarColumnsHook : BaseHook() {
      * 只把每个 item 在背景宽度内均匀分配，保证内外屏一致且不越界。
      */
     private fun applyAllAppsGrid(module: XposedModule, recycler: View, host: View? = null) {
+        // 定位开关：true 时应用面板完全交给宿主原生，只保留侧边栏双列。
+        if (DIAGNOSTIC_DISABLE_ALL_APPS) {
+            logWarn(module, "DIAG all-apps untouched (native)")
+            return
+        }
         allAppsTargets.add(recycler)
         if (host != null) allAppsHosts[recycler] = WeakReference(host)
         val columns = desiredAllAppsColumns(recycler)

@@ -444,6 +444,12 @@ object SidebarColumnsHook : BaseHook() {
         fitTopActions(host ?: recycler)
         appliedColumns[recycler] = columns
         forceExistingGridSpan(recycler, columns)
+        val hostView = host ?: recycler
+        val parentView = hostView.parent as? View
+        val first = (recycler as? ViewGroup)?.getChildAt(0)
+        logWarn(module, "all-apps sizes host=${hostView.width} parent=${parentView?.width} " +
+            "recycler=${recycler.width} padding=${recycler.paddingLeft}/${recycler.paddingRight} " +
+            "child=${first?.width} columns=$columns density=${hostView.context?.resources?.displayMetrics?.density}")
         log(module, "all-apps panel columns=$columns on ${recycler.javaClass.simpleName}")
     }
 

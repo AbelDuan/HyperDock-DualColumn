@@ -241,6 +241,8 @@ object SidebarColumnsHook : BaseHook() {
                 if (selfSetting.get() == true || self == null) {
                     return@intercept chain.proceed()
                 }
+                // 原生编辑态放行：这时重建布局管理器/改面板尺寸都会让宿主退出编辑。
+                if (SidebarEditGuard.active) return@intercept chain.proceed()
                 // 展开后的“全部应用”面板（最近应用 / 所有应用）与侧边栏本体无关：
                 // 本体固定两列，面板固定 4 列。这里不能装 dock 用的 SpanSizeLookup
                 // ——它按 dock 的 displayList 算 span，会把面板标题/图标错位。

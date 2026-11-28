@@ -107,6 +107,10 @@ object SidebarColumnsHook : BaseHook() {
     private val allAppsFitters = Collections.synchronizedMap(WeakHashMap<View, View.OnLayoutChangeListener>())
     /** 确认属于「全部应用面板」的 RecyclerView；onLayout 是类级 hook，必须按实例过滤。 */
     private val allAppsTargets = Collections.newSetFromMap(WeakHashMap<View, Boolean>())
+    /** 应用面板的 SpanSizeLookup 实例 -> 该面板的 adapter（用于判断标题/分割线）。 */
+    private val allAppsSpanLookups = Collections.synchronizedMap(WeakHashMap<Any, Any>())
+    /** adapter -> (数据列表, 主类型)；列表引用变化时重算。 */
+    private val allAppsMajorTypes = Collections.synchronizedMap(WeakHashMap<Any, Pair<List<*>, Class<*>?>>())
     /** 应用面板 RecyclerView -> 面板容器，onLayout 时用来按需加宽面板。 */
     private val allAppsHosts = Collections.synchronizedMap(WeakHashMap<View, WeakReference<View>>())
     /** 全部应用面板容器被我们改过的宽度，用来识别“旧目标宽度”的兄弟背景。 */
@@ -251,6 +255,7 @@ object SidebarColumnsHook : BaseHook() {
                         val grid = buildGrid(self.context, columns)
                         if (grid != null) {
                             appliedColumns[self] = columns
+                            installAllAppsSpanLookup(module, grid, self, columns)
                             installAllAppsLayoutHook(module, self, null, columns)
                             return@intercept chain.proceed(arrayOf<Any?>(grid))
                         }
@@ -462,6 +467,7 @@ object SidebarColumnsHook : BaseHook() {
         val setLm = setLayoutManagerMethod
         val current = runCatching { getLayoutManagerMethod?.invoke(recycler) }.getOrNull()
         if (gridClass?.isInstance(current) == true) {
+            installAllAppsSpanLookup(module, current, recycler, columns)
             forceExistingGridSpan(recycler, columns)
             appliedColumns[recycler] = columns
             return
@@ -475,6 +481,7 @@ object SidebarColumnsHook : BaseHook() {
         selfSetting.remove()
         if (ok) {
             appliedColumns[recycler] = columns
+            installAllAppsSpanLookup(module, grid, recycler, columns)
             forceExistingGridSpan(recycler, columns)
         } else {
             logWarn(module, "all-apps setLayoutManager failed")
@@ -946,8 +953,15 @@ object SidebarColumnsHook : BaseHook() {
      * 反查；默认实现 `GridLayoutManager$a` 可以直接 new 出来，再 hook 它的
      * `getSpanSize`，按实例身份分流（其它 GridLayoutManager 不受影响）。
      */
-    private fun installSpanLookup(module: XposedModule, grid: Any, columns: Int) {
-        val gridType = gridClass ?: return
+    /** SpanSizeLookup 的基类/默认实现/取值方法/setter，只解析一次。 */
+    private var spanBase: Class<*>? = null
+    private var spanDefault: Class<*>? = null
+    private var spanGetter: Method? = null
+    private var spanSetter: Method? = null
+
+    private fun resolveSpanTypes(module: XposedModule): Boolean {
+        if (spanGetter != null && spanSetter != null) return true
+        val gridType = gridClass ?: return false
         val base = gridType.declaredClasses.firstOrNull { type ->
             Modifier.isAbstract(type.modifiers) && type.declaredMethods.any { method ->
                 Modifier.isAbstract(method.modifiers) && method.returnType == Int::class.javaPrimitiveType &&
@@ -958,43 +972,95 @@ object SidebarColumnsHook : BaseHook() {
             type.superclass == base && !Modifier.isAbstract(type.modifiers) &&
                 runCatching { type.getConstructor() }.isSuccess
         }
-        if (base == null || defaultType == null) {
-            logWarn(module, "span lookup classes unavailable; divider stays in one cell")
-            return
-        }
-        val getSpanSize = defaultType.declaredMethods.singleOrNull { method ->
-                !Modifier.isStatic(method.modifiers) &&
+        val getSpanSize = defaultType?.declaredMethods?.singleOrNull { method ->
+            !Modifier.isStatic(method.modifiers) &&
                 method.returnType == Int::class.javaPrimitiveType && method.parameterCount == 1 &&
-                    method.parameterTypes[0] == Int::class.javaPrimitiveType
-            }
+                method.parameterTypes[0] == Int::class.javaPrimitiveType
+        }
         val setter = gridType.methods.firstOrNull { method ->
             method.returnType == Void.TYPE && method.parameterCount == 1 && method.parameterTypes[0] == base
         }
-        if (getSpanSize == null || setter == null) {
-            logWarn(module, "span lookup wiring unavailable; divider stays in one cell")
-            return
+        if (base == null || defaultType == null || getSpanSize == null || setter == null) {
+            logWarn(module, "span lookup wiring unavailable; dividers stay in one cell")
+            return false
         }
-        val instance = runCatching { defaultType.getConstructor().newInstance() }.getOrNull() ?: return
-        if (!spanLookupInstalled) {
-            getSpanSize.isAccessible = true
-            runCatching {
-                module.hook(getSpanSize).intercept { chain ->
-                    val columnsNow = spanLookupColumns[chain.thisObject] ?: 1
-                    if (columnsNow <= 1) {
-                        return@intercept chain.proceed()
-                    }
-                    val position = chain.args.firstOrNull() as? Int ?: return@intercept chain.proceed()
-                    SidebarDockState.spanFor(position, columnsNow)
+        spanBase = base
+        spanDefault = defaultType
+        spanGetter = getSpanSize
+        spanSetter = setter
+        return true
+    }
+
+    private fun ensureSpanHook(module: XposedModule): Boolean {
+        if (!resolveSpanTypes(module)) return false
+        if (spanLookupInstalled) return true
+        val getSpanSize = spanGetter ?: return false
+        getSpanSize.isAccessible = true
+        runCatching {
+            module.hook(getSpanSize).intercept { chain ->
+                val columnsNow = spanLookupColumns[chain.thisObject] ?: 1
+                if (columnsNow <= 1) return@intercept chain.proceed()
+                val position = chain.args.firstOrNull() as? Int ?: return@intercept chain.proceed()
+                val allAppsAdapter = allAppsSpanLookups[chain.thisObject]
+                if (allAppsAdapter != null) {
+                    return@intercept allAppsSpanFor(allAppsAdapter, position, columnsNow)
                 }
-            }.onFailure { logWarn(module, "span lookup hook failed: ${it.message}") }
-            spanLookupInstalled = true
-            log(module, "span lookup hooked ${defaultType.name}.${getSpanSize.name}")
-        }
+                SidebarDockState.spanFor(position, columnsNow)
+            }
+        }.onFailure { logWarn(module, "span lookup hook failed: ${it.message}") }
+        spanLookupInstalled = true
+        log(module, "span lookup hooked ${spanDefault?.name}.${getSpanSize.name}")
+        return true
+    }
+
+    private fun installSpanLookup(module: XposedModule, grid: Any, columns: Int) {
+        if (!ensureSpanHook(module)) return
+        val instance = runCatching { spanDefault?.getConstructor()?.newInstance() }.getOrNull() ?: return
         spanLookupColumns[instance] = columns
         runCatching {
-            setter.isAccessible = true
-            setter.invoke(grid, instance)
+            spanSetter?.isAccessible = true
+            spanSetter?.invoke(grid, instance)
         }.onFailure { logWarn(module, "setSpanSizeLookup failed: ${it.message}") }
+    }
+
+    /** 应用面板：标题/分割线（少数类型）占满整行，图标（多数类型）占一格。 */
+    private fun installAllAppsSpanLookup(module: XposedModule, grid: Any, recycler: View, columns: Int) {
+        if (!ensureSpanHook(module)) return
+        val adapter = runCatching { getAdapterMethod?.invoke(recycler) }.getOrNull() ?: return
+        val instance = runCatching { spanDefault?.getConstructor()?.newInstance() }.getOrNull() ?: return
+        spanLookupColumns[instance] = columns
+        allAppsSpanLookups[instance] = adapter
+        runCatching {
+            spanSetter?.isAccessible = true
+            spanSetter?.invoke(grid, instance)
+            logWarn(module, "all-apps span lookup installed columns=$columns adapter=${adapter.javaClass.simpleName}")
+        }.onFailure { logWarn(module, "all-apps span lookup failed: ${it.message}") }
+    }
+
+    /** 读 adapter 的数据列表并算出「主类型」（图标），其余类型视为标题/分割线。 */
+    private fun allAppsSpanFor(adapter: Any, position: Int, columns: Int): Int {
+        val cached = allAppsMajorTypes[adapter]
+        val list = runCatching {
+            generateSequence(adapter.javaClass as Class<*>?) { it.superclass }
+                .flatMap { it.declaredFields.asSequence() }
+                .firstOrNull { List::class.java.isAssignableFrom(it.type) }
+                ?.let { field ->
+                    field.isAccessible = true
+                    field.get(adapter) as? List<*>
+                }
+        }.getOrNull() ?: return 1
+        val major = if (cached != null && cached.first === list) {
+            cached.second
+        } else {
+            val computed = runCatching {
+                list.filterNotNull().groupingBy { it.javaClass }.eachCount()
+                    .maxByOrNull { it.value }?.key
+            }.getOrNull()
+            allAppsMajorTypes[adapter] = list to computed
+            computed
+        } ?: return 1
+        val item = list.getOrNull(position) ?: return 1
+        return if (item != null && item.javaClass == major) 1 else columns
     }
 
     private fun applyColumnCount(module: XposedModule, recycler: View, columns: Int) {

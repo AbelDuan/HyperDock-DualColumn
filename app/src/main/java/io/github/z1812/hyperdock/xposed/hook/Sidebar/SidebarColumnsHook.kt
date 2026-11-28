@@ -414,10 +414,20 @@ object SidebarColumnsHook : BaseHook() {
         allAppsFitters[recycler] = listener
     }
 
+    /** 应用面板的列宽比 dock 图标更宽，否则 5/6 列会把图标挤在一起。 */
+    private fun allAppsTargetWidth(context: Context, columns: Int): Int {
+        val metrics = context.resources?.displayMetrics ?: return 0
+        val density = metrics.density.takeIf { it > 0f } ?: return 0
+        val edge = dimension(context, "dock_item_edge", FALLBACK_ITEM_EDGE_DP)
+        val padding = dimension(context, "dock_item_padding", FALLBACK_ITEM_PADDING_DP)
+        val cell = maxOf(edge * 1.5f, 72f)
+        return ((columns * cell + (columns + 1) * padding) * density).roundToInt()
+    }
+
     /** 面板外框宽度按列数计算，不再沿用系统写死的 3 列宽度或铺满外屏。 */
     private fun applyAllAppsPanelSize(recycler: View, columns: Int) {
         val context = recycler.context ?: return
-        val target = targetWidth(context, columns)
+        val target = allAppsTargetWidth(context, columns)
         if (target <= 0) return
         val parent = recycler.parent as? ViewGroup ?: return
         widenAllAppsGroup(parent, recycler, target)
@@ -460,7 +470,7 @@ object SidebarColumnsHook : BaseHook() {
     private fun fitAllAppsItems(recycler: View, columns: Int) {
         val parent = recycler as? ViewGroup ?: return
         if (columns < 1) return
-        val usable = targetWidth(recycler.context, columns).takeIf { it > 0 }
+        val usable = allAppsTargetWidth(recycler.context, columns).takeIf { it > 0 }
             ?: (recycler.width - recycler.paddingLeft - recycler.paddingRight)
         if (usable <= 0) return
         val width = usable / columns
